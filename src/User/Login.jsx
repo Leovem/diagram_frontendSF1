@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../services/authService'; // Asegúrate de que el path sea correcto
 import toast from 'react-hot-toast';
+import jwt_decode from 'jwt-decode';
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,13 +15,21 @@ const Login = () => {
     try {
       const data = await loginUser(email, password);
       localStorage.setItem('token', data.token);
+
+         // Decodificar el token para obtener el roleId
+    const decoded = jwt_decode(data.token);
     //   alert('Login exitoso');
     toast.success('Login exitoso ');
     setTimeout(() => {
+      if (decoded.roleId === 1) {
+        navigate('/users');
+      } else {
         navigate('/dashboard');
-      }, 1500);
-    } catch (err) {
-      alert('Credenciales incorrectas o error de conexión');
+      }
+    }, 1500);
+
+  } catch (err) {
+      toast.success('Credenciales incorrectas o error de conexión');
     } finally {
       setLoading(false);
     }

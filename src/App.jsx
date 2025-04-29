@@ -5,6 +5,10 @@ import Register from './User/Register';
 import Dashboard from './User/Dashboard';
 import PrivateRoute from './routes/PrivateRoute'; //
 import MyCanvas from './figma/MyEditor';
+import ManageRoles from './Manage/ManageRoles';
+import UserManagement from './Manage/UserManagement';
+import AssignRole from './Manage/AssignRole';
+import AdminDashboard from './Manage/AdminDashboard';
 import DiagramViewer from './Diagram/DiagramViewer';
 function App() {
   return (
@@ -22,6 +26,12 @@ function App() {
         }
         
       />
+      {/* Agrupar rutas admin con layout */}
+      <Route element={<AdminDashboard />}>
+        <Route path="/users" element={<UserManagement />} />
+        <Route path="/Roles" element={<ManageRoles />} />
+        <Route path="/assign_role" element={<AssignRole />} />
+      </Route>
       <Route path="/room/:roomName" element={<MyCanvas />} />
     </Routes>
   );
