@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { xml2js } from "xml-js";
 import { generarAngularProyecto } from "./angularGenerator";
+
 function DiagramViewer() {
   const [clases, setClases] = useState([]);
   const [conexiones, setConexiones] = useState([]);
@@ -60,7 +61,6 @@ function DiagramViewer() {
     setConexiones(edges);
   };
 
-  // Mantengo tu función ML para StarUML
   const ML = (json) => {
     const clasesDetectadas = [];
 
@@ -173,6 +173,15 @@ function DiagramViewer() {
     <div className="p-8 font-sans bg-gray-900 min-h-screen">
       <h1 className="text-4xl font-bold mb-10 text-center text-blue-700">Visor de Diagramas: Draw.io & StarUML</h1>
       
+      {/* Mostrar mensaje por defecto antes de cargar archivo */}
+      {clases.length === 0 && conexiones.length === 0 && (
+        <div className="text-center text-gray-500 mb-12">
+          <p>Por favor, carga un archivo Draw.io o StarUML para comenzar.</p>
+          <p className="mt-4 text-sm">Los diagramas y las clases aparecerán aquí una vez que se cargue un archivo.</p>
+        </div>
+      )}
+  
+      {/* Botón para cargar archivo */}
       <div className="flex justify-center mb-12">
         <input
           type="file"
@@ -181,8 +190,9 @@ function DiagramViewer() {
           className="block w-full max-w-sm text-sm text-gray-700 border-2 border-gray-400 rounded-lg cursor-pointer bg-white p-3 shadow"
         />
       </div>
-  {/* 🚨 Botón para generar el proyecto Angular */}
-  {modo === "staruml" && clases.length > 0 && (
+  
+      {/* Mostrar el botón de generación de proyecto solo si estamos en modo "staruml" y hay clases */}
+      {modo === "staruml" && clases.length > 0 && (
         <div className="flex justify-center mb-12">
           <button
             onClick={() => generarAngularProyecto(clases.map(c => ({ name: c.name, atributos: c.atributos })))}
@@ -192,7 +202,9 @@ function DiagramViewer() {
           </button>
         </div>
       )}
-      {modo === "drawio" && (
+  
+      {/* Mostrar las clases y conexiones dependiendo de si el archivo Draw.io o StarUML ha sido cargado */}
+      {modo === "drawio" && clases.length > 0 && (
         <div className="space-y-10">
           <div>
             <h2 className="text-3xl font-semibold mb-4 text-gray-800">🧾 Clases encontradas:</h2>
@@ -227,116 +239,39 @@ function DiagramViewer() {
         </div>
       )}
   
-      {modo === "staruml" && (
+      {modo === "staruml" && clases.length > 0 && (
         <div className="space-y-14">
           <div>
             <h2 className="text-3xl font-semibold mb-6 text-gray-800">🧾 Clases en StarUML:</h2>
             <ul className="space-y-8">
-  {clases.map((clase, idx) => (
-    <li key={idx} className="grid grid-cols-2 gap-6 bg-white p-6 rounded-lg shadow-lg border border-gray-300">
-      {/* Columna Izquierda: Clases */}
-      <div>
-        <h3 className="text-2xl font-bold mb-3 text-blue-700">📦 {clase.name}</h3>
-        <ul className="space-y-1 text-gray-800">
-          {clase.atributos.map((a, i) => (
-            <li key={i}>🔸 <span className="font-medium">Atributo:</span> {a}</li>
-          ))}
-          {clase.operaciones.map((o, i) => (
-            <li key={i}>⚙️ <span className="font-medium">Operación:</span> {o}</li>
-          ))}
-        </ul>
-      </div>
-
-      {/* Columna Derecha: Código HTML */}
-      <div>
-        <h4 className="font-semibold mb-2 text-gray-700">📝 Código HTML del formulario:</h4>
-        <textarea
-          readOnly
-          rows={10}
-          className="w-full h-full p-3 border-2 border-gray-400 rounded bg-gray-800 text-green-300 font-mono text-sm shadow resize-none"
-          value={generarHTMLFormulario(clase)}
-        ></textarea>
-      </div>
-    </li>
-  ))}
-</ul>
-          </div>
+              {clases.map((clase, idx) => (
+                <li key={idx} className="grid grid-cols-2 gap-6 bg-white p-6 rounded-lg shadow-lg border border-gray-300">
+                  {/* Columna Izquierda: Clases */}
+                  <div>
+                    <h3 className="text-2xl font-bold mb-3 text-blue-700">📦 {clase.name}</h3>
+                    <ul className="space-y-1 text-gray-800">
+                      {clase.atributos.map((a, i) => (
+                        <li key={i}>🔸 <span className="font-medium">Atributo:</span> {a}</li>
+                      ))}
+                      {clase.operaciones.map((o, i) => (
+                        <li key={i}>⚙️ <span className="font-medium">Operación:</span> {o}</li>
+                      ))}
+                    </ul>
+                  </div>
   
-          <div>
-            <h2 className="text-3xl font-semibold mb-6 text-gray-800">🛠 CRUD dinámico por clase</h2>
-            {clases.map((clase, idx) => {
-              const formState = formularios[clase.name];
-              if (!formState) return null;
-  
-              return (
-                <div key={idx} className="bg-white p-8 rounded-lg shadow-lg border border-gray-300 mb-10">
-                  <h3 className="text-2xl font-bold mb-5 text-blue-700">📦 {clase.name}</h3>
-  
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      enviarFormulario(clase.name);
-                    }}
-                    className="space-y-4"
-                  >
-                    {clase.atributos.map((attr, i) => (
-                      <div key={i} className="flex flex-col">
-                        <label className="mb-1 font-medium">{attr}:</label>
-                        <input
-                          type="text"
-                          name={attr}
-                          value={formState.form[attr] || ""}
-                          onChange={(e) => actualizarFormulario(clase.name, { [attr]: e.target.value })}
-                          className="border-2 border-gray-400 rounded p-2 focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    ))}
-                    <button
-                      type="submit"
-                      className="bg-blue-600 text-white px-6 py-3 rounded hover:bg-blue-700 text-sm font-semibold shadow"
-                    >
-                      {formState.editIndex !== null ? "Actualizar" : "Agregar"}
-                    </button>
-                  </form>
-  
-                  {formState.data.length > 0 && (
-                    <table className="table-auto w-full mt-6 border border-gray-300 text-sm">
-                      <thead className="bg-gray-200">
-                        <tr>
-                          {clase.atributos.map((attr, idx) => (
-                            <th key={idx} className="border px-4 py-2">{attr}</th>
-                          ))}
-                          <th className="border px-4 py-2">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {formState.data.map((item, idx) => (
-                          <tr key={idx} className="text-center">
-                            {clase.atributos.map((attr, i) => (
-                              <td key={i} className="border px-4 py-2">{item[attr]}</td>
-                            ))}
-                            <td className="border px-4 py-2 space-x-2">
-                              <button
-                                onClick={() => editarElemento(clase.name, idx)}
-                                className="bg-yellow-400 px-3 py-1 rounded hover:bg-yellow-500 text-black"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => eliminarElemento(clase.name, idx)}
-                                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-                              >
-                                Eliminar
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              );
-            })}
+                  {/* Columna Derecha: Código HTML */}
+                  <div>
+                    <h4 className="font-semibold mb-2 text-gray-700">📝 Código HTML del formulario:</h4>
+                    <textarea
+                      readOnly
+                      rows={10}
+                      className="w-full h-full p-3 border-2 border-gray-400 rounded bg-gray-800 text-green-300 font-mono text-sm shadow resize-none"
+                      value={generarHTMLFormulario(clase)}
+                    ></textarea>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

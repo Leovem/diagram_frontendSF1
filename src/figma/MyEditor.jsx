@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { socket } from './socketService'; 
 
-function GenerateCodePanel({ setHtmlCode, setCssCode }) {
+function GenerateCodePanel({ setHtmlCode, setCssCode, roomName }) {
   const editor = useEditor();
 
   const handleGenerateCode = () => {
@@ -64,6 +64,7 @@ function GenerateCodePanel({ setHtmlCode, setCssCode }) {
 
     setHtmlCode(html);
     setCssCode(css);
+    socket.emit('codeGenerated', { roomName, htmlCode: html, cssCode: css });
   };
 
   return (
@@ -81,7 +82,7 @@ export default function MyCanvas() {
   const [cssCode, setCssCode] = useState('');
   
   const { roomName } = useParams();
-  
+
   useEffect(() => {
     if (!roomName) {
       console.log("❌ No se detectó roomName");
@@ -105,15 +106,28 @@ export default function MyCanvas() {
         console.log('🛑 Cleanup sin desconectar');
       };
   }, [roomName]);
+  useEffect(() => {
+    const handleReceiveCode = ({ htmlCode, cssCode }) => {
+      console.log('📩 Código recibido');
+      setHtmlCode(htmlCode);
+      setCssCode(cssCode);
+    };
   
-
+    socket.on('receiveCode', handleReceiveCode);
+  
+    return () => {
+      socket.off('receiveCode', handleReceiveCode);
+    };
+  }, []);
   return (
     <div className="flex h-screen">
       <div className="flex-2 border-r border-gray-300 relative">
-        <TldrawEditor>
-          <Tldraw />
-          <GenerateCodePanel setHtmlCode={setHtmlCode} setCssCode={setCssCode} />
-        </TldrawEditor>
+        {/* <TldrawEditor> */}
+        <Tldraw>
+          <TldrawSync roomName={roomName} />
+          <GenerateCodePanel setHtmlCode={setHtmlCode} setCssCode={setCssCode} roomName={roomName} />
+        </Tldraw>
+        {/* </TldrawEditor> */}
       </div>
       <div className="flex-1 p-6 overflow-auto bg-gray-900 text-white">
         <h3 className="text-xl font-semibold mb-2">HTML</h3>
@@ -125,3 +139,62 @@ export default function MyCanvas() {
   );
 }
 
+
+
+function TldrawSync({ roomName }) {
+  const editor = useEditor();
+
+  useEffect(() => {
+    if (!editor) return;
+
+    // 🔵 Cuando el usuario crea/mueve/edita shapes, enviamos al server
+    const onShapeChange = (snapshot) => {
+      if (!snapshot) return;
+
+      const allShapes = Array.from(editor.store.allRecords())
+        .filter(record => record.typeName === 'shape'); // solo los shapes
+
+      socket.emit('shapeChange', { roomName, shapes: allShapes }); // enviamos correctamente
+    };
+
+    const unsubscribe = editor.store.listen(onShapeChange, { source: 'user' });
+
+    return () => {
+      unsubscribe(); // limpiar
+    };
+  }, [editor, roomName]);
+
+  useEffect(() => {
+    if (!editor) return;
+
+    // 🔵 Cuando recibimos shapes de otros usuarios
+    const handleReceiveShapes = ({ shapes }) => {
+      if (!Array.isArray(shapes)) {
+        console.error('shapes no es un array:', shapes);
+        return;
+      }
+
+      // 🔵 Actualizar editor con los nuevos shapes
+      shapes.forEach(shape => {
+        try {
+          const existingShape = editor.getShape(shape.id);
+          if (existingShape) {
+            editor.updateShape(shape); // si ya existe, actualizar
+          } else {
+            editor.createShape(shape); // si no existe, crear
+          }
+        } catch (error) {
+          console.error('Error aplicando shape recibido:', error);
+        }
+      });
+    };
+
+    socket.on('receiveShapes', handleReceiveShapes);
+
+    return () => {
+      socket.off('receiveShapes', handleReceiveShapes);
+    };
+  }, [editor, roomName]);
+
+  return null; // no pinta nada en pantalla
+}
