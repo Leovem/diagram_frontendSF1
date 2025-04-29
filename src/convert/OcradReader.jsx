@@ -5,6 +5,7 @@ export default function OcradReader() {
   const [text, setText] = useState('');
   const [htmlCode, setHtmlCode] = useState('');
   const [htmlPreview, setHtmlPreview] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   useEffect(() => {
     const script = document.createElement('script');
@@ -72,7 +73,7 @@ export default function OcradReader() {
 
   const handleCopy = () => {
     navigator.clipboard.writeText(htmlCode);
-    alert('📋 HTML copiado al portapapeles');
+    alert('HTML copiado al portapapeles');
   };
 
   const handleDownload = () => {
@@ -85,8 +86,8 @@ export default function OcradReader() {
 
   return (
     <div className="p-4 bg-gray-900 text-white min-h-screen">
-      <div className="max-w-screen-md mx-auto space-y-6">
-        <h2 className="text-2xl font-bold">iMAGEN A HTML</h2>
+      <div className="max-w-screen-xl mx-auto space-y-6">
+        <h2 className="text-2xl font-bold">Imagen a HTML</h2>
 
         <input
           type="file"
@@ -97,48 +98,59 @@ export default function OcradReader() {
 
         <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-        <div>
-          <h3 className="text-xl font-semibold mt-4">📝 Texto detectado:</h3>
-          <pre className="bg-gray-800 text-green-400 p-3 rounded overflow-x-auto whitespace-pre-wrap">{text}</pre>
-        </div>
+        <div className="flex flex-col md:flex-row gap-4">
+          {/* Texto detectado */}
+          <div className="md:w-1/2">
+            <h3 className="text-xl font-semibold mt-4">Elementos Detectados:</h3>
+            <pre className="bg-gray-800 text-green-400 p-3 rounded overflow-x-auto whitespace-pre-wrap h-full">{text}</pre>
+          </div>
 
-        <div>
-          <h3 className="text-xl font-semibold">📄 Código HTML generado:</h3>
-          <textarea
-            value={htmlCode}
-            onChange={(e) => setHtmlCode(e.target.value)}
-            rows={15}
-            className="w-full p-3 bg-gray-800 border border-gray-600 rounded text-white font-mono"
-          />
+          {/* Código HTML generado */}
+          <div className="md:w-1/2">
+            <h3 className="text-xl font-semibold">Código HTML generado:</h3>
+            <textarea
+              value={htmlCode}
+              onChange={(e) => setHtmlCode(e.target.value)}
+              rows={15}
+              className="w-full p-3 bg-gray-800 border border-gray-600 rounded text-white font-mono"
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-3">
           <button onClick={handleCopy} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">
-            📋 Copiar HTML
+            Copiar HTML
           </button>
           <button onClick={handleDownload} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white">
-            ⬇️ Descargar HTML
+            Descargar HTML
           </button>
           <button onClick={() => setHtmlPreview(htmlCode)} className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white">
-            🔁 Aplicar cambios
+            Aplicar cambios
+          </button>
+          <button onClick={() => setShowPreview(!showPreview)} className="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-white">
+            {showPreview ? 'Ocultar vista previa' : 'Mostrar vista previa'}
           </button>
         </div>
 
-        <h3 className="mt-6 font-semibold">🧪 Vista previa del formulario:</h3>
-        <div className="mt-2 bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
-  <div
-    className="
-      text-gray-800
-      [&>form]:flex [&>form]:flex-col [&>form]:gap-4
-      [&>form>label]:font-semibold [&>form>label]:text-gray-800
-      [&>form>input]:p-2 [&>form>input]:rounded-md [&>form>input]:border [&>form>input]:border-gray-300 [&>form>input]:text-gray-800
-      [&>form>select]:p-2 [&>form>select]:rounded-md [&>form>select]:border [&>form>select]:border-gray-300 [&>form>select]:text-gray-800
-      [&>form>button]:bg-blue-600 [&>form>button]:text-white [&>form>button]:p-2 [&>form>button]:rounded-md [&>form>button]:hover:bg-blue-700
-      [&>form>p]:text-gray-800
-    "
-    dangerouslySetInnerHTML={{ __html: htmlPreview }}
-  />
-</div>
+        {showPreview && (
+          <>
+            <h3 className="mt-6 font-semibold">Vista previa del formulario:</h3>
+            <div className="mt-2 bg-gray-50 p-6 rounded-xl shadow-md border border-gray-200">
+              <div
+                className="
+                  text-gray-800
+                  [&>form]:flex [&>form]:flex-col [&>form]:gap-4
+                  [&>form>label]:font-semibold [&>form>label]:text-gray-800
+                  [&>form>input]:p-2 [&>form>input]:rounded-md [&>form>input]:border [&>form>input]:border-gray-300 [&>form>input]:text-gray-800
+                  [&>form>select]:p-2 [&>form>select]:rounded-md [&>form>select]:border [&>form>select]:border-gray-300 [&>form>select]:text-gray-800
+                  [&>form>button]:bg-blue-600 [&>form>button]:text-white [&>form>button]:p-2 [&>form>button]:rounded-md [&>form>button]:hover:bg-blue-700
+                  [&>form>p]:text-gray-800
+                "
+                dangerouslySetInnerHTML={{ __html: htmlPreview }}
+              />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

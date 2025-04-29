@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, Outlet, useNavigate } from 'react-router-dom';
-
+import ActiveRooms from './ActiveRooms';
 const AdminDashboard = () => {
   const navigate = useNavigate();
 
@@ -18,6 +18,9 @@ const AdminDashboard = () => {
           <Link to="/Roles" className="hover:bg-gray-700 px-3 py-2 rounded">Gestionar Roles</Link>
           <Link to="/assign_role" className="hover:bg-gray-700 px-3 py-2 rounded">Asignar Rol</Link>
         </nav>
+        
+        {/* Agregamos el componente ActiveRooms en el Sidebar */}
+        <ActiveRooms /> {/* Aquí mostramos las salas activas */}
 
         {/* Botón para ir al Dashboard de Usuario */}
         <button
