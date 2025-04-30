@@ -9,7 +9,7 @@ export default function OcradReader() {
 
   useEffect(() => {
     const script = document.createElement('script');
-    script.src = '/public/ocrad.js';
+    script.src = '/ocrad.js';
     script.async = true;
     document.body.appendChild(script);
     return () => document.body.removeChild(script);

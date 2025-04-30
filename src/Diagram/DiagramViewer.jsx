@@ -171,7 +171,7 @@ function DiagramViewer() {
 
   return (
     <div className="p-8 font-sans bg-gray-900 min-h-screen">
-      <h1 className="text-4xl font-bold mb-10 text-center text-blue-700">Visor de Diagramas: Draw.io & StarUML</h1>
+      <h1 className="text-4xl font-bold mb-10 text-center text-blue-700">Visor de Diagramas</h1>
       
       {/* Mostrar mensaje por defecto antes de cargar archivo */}
       {clases.length === 0 && conexiones.length === 0 && (
@@ -198,7 +198,7 @@ function DiagramViewer() {
             onClick={() => generarAngularProyecto(clases.map(c => ({ name: c.name, atributos: c.atributos })))}
             className="bg-green-600 text-white px-6 py-3 rounded hover:bg-green-700 font-semibold shadow"
           >
-            📦 Generar Proyecto Angular
+           Generar Proyecto Angular
           </button>
         </div>
       )}
@@ -210,17 +210,17 @@ function DiagramViewer() {
             <h2 className="text-3xl font-semibold mb-4 text-gray-800">🧾 Clases encontradas:</h2>
             <ul className="list-disc list-inside bg-white p-4 rounded-lg shadow border border-gray-300">
               {[...new Set(clases.map((c) => c.name).filter(Boolean))].map((nombre, idx) => (
-                <li key={idx} className="text-gray-700">📦 <strong>{nombre}</strong></li>
+                <li key={idx} className="text-gray-700"> <strong>{nombre}</strong></li>
               ))}
             </ul>
           </div>
   
           <div>
-            <h2 className="text-3xl font-semibold mb-4 text-gray-800">📌 Nodos detectados:</h2>
+            <h2 className="text-3xl font-semibold mb-4 text-gray-800"> Nodos detectados:</h2>
             <ul className="space-y-2 bg-white p-4 rounded-lg shadow border border-gray-300">
               {clases.map((nodo) => (
                 <li key={nodo.id} className="text-gray-700">
-                  🟦 <strong>{nodo.name}</strong> (x: {nodo.x}, y: {nodo.y})
+                   <strong>{nodo.name}</strong> (x: {nodo.x}, y: {nodo.y})
                 </li>
               ))}
             </ul>
@@ -242,26 +242,26 @@ function DiagramViewer() {
       {modo === "staruml" && clases.length > 0 && (
         <div className="space-y-14">
           <div>
-            <h2 className="text-3xl font-semibold mb-6 text-gray-800">🧾 Clases en StarUML:</h2>
+            <h2 className="text-3xl font-semibold mb-6 text-gray-800"> Clases en StarUML:</h2>
             <ul className="space-y-8">
               {clases.map((clase, idx) => (
                 <li key={idx} className="grid grid-cols-2 gap-6 bg-white p-6 rounded-lg shadow-lg border border-gray-300">
                   {/* Columna Izquierda: Clases */}
                   <div>
-                    <h3 className="text-2xl font-bold mb-3 text-blue-700">📦 {clase.name}</h3>
+                    <h3 className="text-2xl font-bold mb-3 text-blue-700"> {clase.name}</h3>
                     <ul className="space-y-1 text-gray-800">
                       {clase.atributos.map((a, i) => (
-                        <li key={i}>🔸 <span className="font-medium">Atributo:</span> {a}</li>
+                        <li key={i}> <span className="font-medium">Atributo:</span> {a}</li>
                       ))}
                       {clase.operaciones.map((o, i) => (
-                        <li key={i}>⚙️ <span className="font-medium">Operación:</span> {o}</li>
+                        <li key={i}> <span className="font-medium">Operación:</span> {o}</li>
                       ))}
                     </ul>
                   </div>
   
                   {/* Columna Derecha: Código HTML */}
                   <div>
-                    <h4 className="font-semibold mb-2 text-gray-700">📝 Código HTML del formulario:</h4>
+                    <h4 className="font-semibold mb-2 text-gray-700"> Código HTML del formulario:</h4>
                     <textarea
                       readOnly
                       rows={10}
