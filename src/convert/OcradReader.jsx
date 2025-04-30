@@ -38,19 +38,19 @@ export default function OcradReader() {
 
   const generateFormHTML = (text) => {
     const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    let html = '<form>\n';
+    let html = `<form #form="ngForm">\n`;
 
     lines.forEach(line => {
       const lower = line.toLowerCase();
 
       if (lower.includes('nombre')) {
-        html += '  <label>Nombre</label>\n  <input type="text" name="nombre" /><br/>\n\n';
+        html += `  <label for="nombre">Nombre</label>\n  <input type="text" id="nombre" name="nombre" [(ngModel)]="nombre" /><br/>\n\n`;
       } else if (lower.includes('correo') || lower.includes('email')) {
-        html += '  <label>Correo</label>\n  <input type="email" name="correo" /><br/>\n\n';
+        html += `  <label for="correo">Correo</label>\n  <input type="email" id="correo" name="correo" [(ngModel)]="correo" /><br/>\n\n`;
       } else if (lower.includes('contraseña') || lower.includes('password')) {
-        html += '  <label>Contraseña</label>\n  <input type="password" name="password" /><br/>\n\n';
+        html += `  <label for="password">Contraseña</label>\n  <input type="password" id="password" name="password" [(ngModel)]="password" /><br/>\n\n`;
       } else if (lower.includes('país') || lower.includes('género')) {
-        html += `  <label>${capitalize(line)}</label>\n  <select name="${lower}">\n    <option>Opción 1</option>\n    <option>Opción 2</option>\n  </select><br/>\n\n`;
+        html += `  <label for="pais">${capitalize(line)}</label>\n  <select id="pais" name="pais" [(ngModel)]="pais">\n    <option>Opción 1</option>\n    <option>Opción 2</option>\n  </select><br/>\n\n`;
       } else if (
         lower.includes('enviar') ||
         lower.includes('guardar') ||
@@ -76,12 +76,88 @@ export default function OcradReader() {
     alert('HTML copiado al portapapeles');
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([htmlCode], { type: 'text/html' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'formulario.html';
-    link.click();
+  const handleDownloadAngular = () => {
+    // Archivo HTML (template)
+    const blobHtml = new Blob([htmlCode], { type: 'text/html' });
+    const linkHtml = document.createElement('a');
+    linkHtml.href = URL.createObjectURL(blobHtml);
+    linkHtml.download = 'formulario.component.html';
+    linkHtml.click();
+  
+    // Archivo TS (componente)
+    const tsCode = `
+  import { Component } from '@angular/core';
+  
+  @Component({
+    selector: 'app-formulario',
+    templateUrl: './formulario.component.html',
+    styleUrls: ['./formulario.component.css'],
+  })
+  export class FormularioComponent {
+    nombre: string = '';
+    correo: string = '';
+    password: string = '';
+    pais: string = '';
+  }
+    `.trim();
+  
+    const blobTs = new Blob([tsCode], { type: 'text/typescript' });
+    const linkTs = document.createElement('a');
+    linkTs.href = URL.createObjectURL(blobTs);
+    linkTs.download = 'formulario.component.ts';
+    linkTs.click();
+  
+    // Archivo CSS (estilos)
+    const cssCode = `
+  /* styles.css */
+  
+  /* Formulario */
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  /* Etiquetas de formulario */
+  form label {
+    font-weight: bold;
+    color: #333;
+  }
+  
+  /* Inputs y selects */
+  form input,
+  form select {
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    color: #333;
+  }
+  
+  form button {
+    background-color: #007bff;
+    color: white;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  form button:hover {
+    background-color: #0056b3;
+  }
+  
+  /* Estilo de párrafos */
+  form p {
+    color: #555;
+  }
+    `.trim();
+  
+    const blobCss = new Blob([cssCode], { type: 'text/css' });
+    const linkCss = document.createElement('a');
+    linkCss.href = URL.createObjectURL(blobCss);
+    linkCss.download = 'formulario.component.css';
+    linkCss.click();
   };
 
   return (
@@ -121,7 +197,7 @@ export default function OcradReader() {
           <button onClick={handleCopy} className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">
             Copiar HTML
           </button>
-          <button onClick={handleDownload} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white">
+          <button onClick={handleDownloadAngular} className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white">
             Descargar HTML
           </button>
           <button onClick={() => setHtmlPreview(htmlCode)} className="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-white">
