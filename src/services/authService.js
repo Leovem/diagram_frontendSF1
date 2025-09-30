@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 // ✅ backend corre en 5000 y con /api
-const API_URL = 'http://localhost:5000/api/';
+//const API_URL = 'http://localhost:5000/api/';
+// ✅ CORRECTO: El puerto HTTPS (443) es implícito.
+const API_URL = 'https://diagrambackendsf1-production.up.railway.app/api/';
 
 // Crea una instancia para no repetir baseURL
 const api = axios.create({

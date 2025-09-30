@@ -14,6 +14,8 @@ import { RelationEdgeShapeUtil } from './shapes/RelationEdgeShape';
 // UI extra
 import ERPalette from './ui/ERPalette';
 import ERInspector from './ui/ERInspector';
+import ERDeleteHotkeys from './ui/ERDeleteHotkeys'
+
 
 // Parser ER
 import { shapesToERGraph } from './erParser';
@@ -188,6 +190,8 @@ export default function MyEditor() {
   <TldrawSync roomName={roomName} />
   <ERPalette />
   <ERInspector />
+  <ERDeleteHotkeys />
+
   <GenerateBackendPanel 
     roomName={roomName} 
     setSql={setSql} 

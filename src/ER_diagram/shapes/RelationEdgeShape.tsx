@@ -154,6 +154,13 @@ const geom = {
   },
 }
 
+function selectIds(editor: any, ids: TLShapeId[]) {
+  if (typeof editor.setSelectedShapes === 'function') editor.setSelectedShapes(ids)
+  else if (typeof editor.select === 'function') editor.select(ids)
+}
+
+
+
 /* =====================================
    Marcadores (cardinalidades)
 ===================================== */
@@ -245,7 +252,14 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
     e.stopPropagation()
     e.preventDefault()
     const el = e.currentTarget as HTMLElement
+    
     if ('setPointerCapture' in el) el.setPointerCapture(e.pointerId)
+       try {
+        const current = (editor.getSelectedShapeIds?.() ?? []) as TLShapeId[]
+        if (!current.includes(shape.id as TLShapeId)) {
+          selectIds(editor, [shape.id as TLShapeId])
+        }
+      } catch {}
 
     const pagePoint = getPagePoint(e)
 

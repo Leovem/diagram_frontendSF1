@@ -132,12 +132,23 @@ function executeRelation(editor, cmd) {
   const { aName, bName, aCard, bCard, viceversa, identifying, orthogonal, straight, relName } = cmd
   if (!editor) throw new Error('Editor no disponible.')
 
-  const ents = getEntities(editor)
+  const ents = editor.getCurrentPageShapes().filter(s => s.type === 'entity-table')
   if (!ents.length) throw new Error('No hay entidades en la página.')
-  if (ents.length === 1) throw new Error(`Solo hay una entidad (“${displayNameOfEntity(ents[0])}”). Crea otra entidad.`)
+  if (ents.length === 1) throw new Error(`Solo hay una entidad (“${ents[0]?.props?.name || ents[0].id}”).`)
 
-  const A = bestMatchEntity(aName, ents)
-  const B = bestMatchEntity(bName, ents)
+  const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+  const toks = s => norm(s).split(/[\s\-_/.,;:]+/).filter(Boolean)
+  const disp = e => e?.props?.name || e?.props?.title || e?.id || ''
+  const score = (q, e) => {
+    const n = norm(disp(e)), qn = norm(q)
+    let sc = n.includes(qn) ? 2 : 0
+    const nt = new Set(toks(n)), qt = new Set(toks(qn))
+    let inter = 0; qt.forEach(t => { if (nt.has(t)) inter++ })
+    return sc + inter / Math.max(1, nt.size + qt.size - inter)
+  }
+  const best = (q) => ents.slice().sort((a,b)=>score(q,b)-score(q,a))[0]
+
+  const A = best(aName), B = best(bName)
   if (!A) throw new Error(`No encontré la entidad "${aName}".`)
   if (!B) throw new Error(`No encontré la entidad "${bName}".`)
   if (A.id === B.id) throw new Error('Debes indicar dos entidades distintas.')
@@ -145,17 +156,23 @@ function executeRelation(editor, cmd) {
   const flipped = viceversa ? { a: B, b: A, aCard: bCard, bCard: aCard } : { a: A, b: B, aCard, bCard }
   const routeOrthogonal = straight ? false : (orthogonal ? true : true)
 
+  // Coloca el origin del edge cerca del medio entre A y B (por si tu HTMLContainer dependiera de la posición)
+  const aB = editor.getShapePageBounds(A), bB = editor.getShapePageBounds(B)
+  const mid = aB && bB ? { x: (aB.x + aB.w/2 + bB.x + bB.w/2)/2, y: (aB.y + aB.h/2 + bB.y + bB.h/2)/2 } : { x: 0, y: 0 }
+
   const id = newShapeId('rel')
+  const parentId = editor.getCurrentPageId?.() || editor.getCurrentPage?.()?.id
   const payload = {
     id,
     type: 'relation-edge',
-    x: 0,
-    y: 0,
+    parentId,           // ✅ fuerza página actual
+    x: mid.x || 0,      // ✅ origen razonable
+    y: mid.y || 0,
     props: {
       aEntityId: flipped.a.id,
       bEntityId: flipped.b.id,
-      aFree: { x: 0, y: 0 },
-      bFree: { x: 160, y: 0 },
+      aFree: { x: -80, y: 0 },
+      bFree: { x:  80, y: 0 },
       aCard: flipped.aCard,
       bCard: flipped.bCard,
       waypoints: [],
@@ -165,17 +182,19 @@ function executeRelation(editor, cmd) {
     },
   }
 
-  if (typeof editor.batch === 'function') {
-    editor.batch(() => {
-      createShapeCompat(editor, payload)
-      try {
-        editor.setSelectedShapes?.([flipped.a.id, flipped.b.id, id])
-        editor.zoomToSelection?.({ duration: 200 })
-      } catch {}
-    })
-  } else {
-    createShapeCompat(editor, payload)
+  const doCreate = () => createShapeCompat(editor, payload)
+  if (typeof editor.batch === 'function') editor.batch(doCreate); else doCreate()
+
+  // ✅ sanity check: si no quedó en el store, explica por qué
+  const created = editor.getShape?.(id)
+  if (!created) {
+    throw new Error('La relación no pudo crearse. Revisa: (1) que `RelationEdgeShapeUtil` esté en `shapeUtils`, (2) que el `type` sea exactamente "relation-edge".')
   }
+
+  try {
+    editor.setSelectedShapes?.([flipped.a.id, flipped.b.id, id])
+    editor.zoomToSelection?.({ duration: 200 })
+  } catch {}
 }
 
 /** =========================
