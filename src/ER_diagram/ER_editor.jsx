@@ -166,6 +166,7 @@ export default function MyEditor() {
       {/* Canvas */}
       <div className="flex-2 border-r border-gray-300 relative">
         <Tldraw
+            licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY} 
             shapeUtils={customShapeUtils}
             hideUi
             components={{
