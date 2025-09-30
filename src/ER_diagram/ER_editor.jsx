@@ -70,47 +70,100 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
 /* =========================
    Sincronización colaborativa
 ========================= */
+// Reemplaza TldrawSync completo por este:
 function TldrawSync({ roomName }) {
-  const editor = useEditor();
+  const editor = useEditor()
+  const isApplyingRemote = React.useRef(false)
+  const rafSend = React.useRef(null)
+  const lastSentAt = React.useRef(0)
 
+  // ---- emitir cambios locales (throttle) ----
   useEffect(() => {
-    if (!editor) return;
-    
-    const onShapeChange = () => {
-      const allShapes = Array.from(editor.store.allRecords())
-        .filter((r) => r.typeName === 'shape');
-      socket.emit('shapeChange', { roomName, shapes: allShapes });
-    };
-    
-    const unsub = editor.store.listen(onShapeChange, { source: 'user' });
-    return () => unsub();
-  }, [editor, roomName]);
+    if (!editor) return
 
+    const snapshot = () => {
+      // Solo shapes visibles en la página actual; datos mínimos
+      return editor.getCurrentPageShapes().map(s => ({
+        id: s.id,
+        type: s.type,
+        parentId: s.parentId,
+        x: s.x,
+        y: s.y,
+        rotation: s.rotation,
+        index: s.index,
+        props: s.props,
+      }))
+    }
+
+    const send = () => {
+      try {
+        socket.emit('shapeChange', { roomName, from: socket.id, shapes: snapshot() })
+      } catch (err) {
+        console.error('[sync] emit error:', err)
+      }
+    }
+
+    const onLocalChange = () => {
+      if (isApplyingRemote.current) return // no emitir mientras aplico remoto
+      const now = performance.now()
+      if (now - lastSentAt.current < 33) return // ~30fps
+      lastSentAt.current = now
+
+      if (rafSend.current) return
+      rafSend.current = requestAnimationFrame(() => {
+        rafSend.current = null
+        send()
+      })
+    }
+
+    const unsub = editor.store.listen(onLocalChange, { source: 'user' })
+    return () => {
+      unsub?.()
+      if (rafSend.current) cancelAnimationFrame(rafSend.current)
+    }
+  }, [editor, roomName])
+
+  // ---- recibir y aplicar del servidor ----
   useEffect(() => {
-    if (!editor) return;
-    
-    const handleReceiveShapes = ({ shapes }) => {
-      if (!Array.isArray(shapes)) return;
-      
-      shapes.forEach((s) => {
-        try {
-          const existing = editor.getShape(s.id);
-          if (existing) {
-            editor.updateShape(s);
-          } else {
-            editor.createShape(s);
-          }
-        } catch (err) {
-          console.error('Error aplicando shape recibido:', err);
-        }
-      });
-    };
-    
-    socket.on('receiveShapes', handleReceiveShapes);
-    return () => socket.off('receiveShapes', handleReceiveShapes);
-  }, [editor, roomName]);
+    if (!editor) return
 
-  return null;
+    const upsert = (s) => {
+      const existing = editor.getShape?.(s.id)
+      if (existing) {
+        if (typeof editor.updateShape === 'function') editor.updateShape(s)
+        else editor.updateShapes?.([s])
+      } else {
+        if (typeof editor.createShape === 'function') editor.createShape(s)
+        else editor.createShapes?.([s])
+      }
+    }
+
+    const applyRemote = (shapes) => {
+      const run = () => { for (const s of shapes) { try { upsert(s) } catch (e) { console.warn('[sync] upsert fail', e) } } }
+      // aplica en lote para no disparar listeners por cada shape
+      if (typeof editor.store.mergeRemoteChanges === 'function') editor.store.mergeRemoteChanges(run)
+      else if (typeof editor.batch === 'function') editor.batch(run)
+      else run()
+    }
+
+    const handleReceiveShapes = ({ from, shapes }) => {
+      try {
+        if (from === socket.id) return          // ignora eco
+        if (!Array.isArray(shapes) || !shapes.length) return
+        isApplyingRemote.current = true
+        applyRemote(shapes)
+      } catch (err) {
+        console.error('[sync] apply error:', err)
+      } finally {
+        isApplyingRemote.current = false
+      }
+    }
+
+    socket.on('receiveShapes', handleReceiveShapes)
+    return () => socket.off('receiveShapes', handleReceiveShapes)
+  }, [editor, roomName])
+
+  return null
 }
 
 /* =========================
