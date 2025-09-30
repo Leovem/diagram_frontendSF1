@@ -70,64 +70,80 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
 /* =========================
    Sincronización colaborativa
 ========================= */
-// Reemplaza TldrawSync completo por este:
 function TldrawSync({ roomName }) {
   const editor = useEditor()
   const isApplyingRemote = React.useRef(false)
-  const rafSend = React.useRef(null)
-  const lastSentAt = React.useRef(0)
 
-  // ---- emitir cambios locales (throttle) ----
+  // ids que vimos en el último envío local (para detectar deletes locales)
+  const prevIdsRef = React.useRef(new Set())
+  // tombstones: id -> expiresAt (ms) para evitar “revivir” tras un delete
+  const tombstonesRef = React.useRef(new Map())
+
+  // ---------- emitir cambios locales (throttle ~30fps) ----------
   useEffect(() => {
     if (!editor) return
 
-    const snapshot = () => {
-      // Solo shapes visibles en la página actual; datos mínimos
-      return editor.getCurrentPageShapes().map(s => ({
+    let raf = null
+    let lastSent = 0
+
+    const snapshotUpserts = () =>
+      editor.getCurrentPageShapes().map(s => ({
         id: s.id,
         type: s.type,
         parentId: s.parentId,
-        x: s.x,
-        y: s.y,
-        rotation: s.rotation,
-        index: s.index,
+        x: s.x, y: s.y, rotation: s.rotation, index: s.index,
         props: s.props,
       }))
+
+    const computeDeletes = (currIds) => {
+      const prev = prevIdsRef.current
+      const dels = []
+      for (const id of prev) if (!currIds.has(id)) dels.push(id)
+      // actualiza prevIds para el próximo diff
+      prevIdsRef.current = new Set(currIds)
+      return dels
     }
 
     const send = () => {
-      try {
-        socket.emit('shapeChange', { roomName, from: socket.id, shapes: snapshot() })
-      } catch (err) {
-        console.error('[sync] emit error:', err)
-      }
+      const shapes = editor.getCurrentPageShapes()
+      const currIds = new Set(shapes.map(s => s.id))
+      const upserts = shapes.map(s => ({
+        id: s.id,
+        type: s.type,
+        parentId: s.parentId,
+        x: s.x, y: s.y, rotation: s.rotation, index: s.index,
+        props: s.props,
+      }))
+      const deletes = computeDeletes(currIds)
+
+      socket.emit('shapeChange', { roomName, upserts, deletes })
     }
 
     const onLocalChange = () => {
-      if (isApplyingRemote.current) return // no emitir mientras aplico remoto
+      if (isApplyingRemote.current) return
       const now = performance.now()
-      if (now - lastSentAt.current < 33) return // ~30fps
-      lastSentAt.current = now
+      if (now - lastSent < 33) return // ~30fps
+      lastSent = now
 
-      if (rafSend.current) return
-      rafSend.current = requestAnimationFrame(() => {
-        rafSend.current = null
-        send()
-      })
+      if (raf) return
+      raf = requestAnimationFrame(() => { raf = null; send() })
     }
+
+    // Inicializa prevIds al montar (para que los primeros deletes se calculen bien)
+    prevIdsRef.current = new Set(editor.getCurrentPageShapes().map(s => s.id))
 
     const unsub = editor.store.listen(onLocalChange, { source: 'user' })
     return () => {
       unsub?.()
-      if (rafSend.current) cancelAnimationFrame(rafSend.current)
+      if (raf) cancelAnimationFrame(raf)
     }
   }, [editor, roomName])
 
-  // ---- recibir y aplicar del servidor ----
+  // ---------- recibir cambios remotos ----------
   useEffect(() => {
     if (!editor) return
 
-    const upsert = (s) => {
+    const upsertOne = (s) => {
       const existing = editor.getShape?.(s.id)
       if (existing) {
         if (typeof editor.updateShape === 'function') editor.updateShape(s)
@@ -138,33 +154,48 @@ function TldrawSync({ roomName }) {
       }
     }
 
-    const applyRemote = (shapes) => {
-      const run = () => { for (const s of shapes) { try { upsert(s) } catch (e) { console.warn('[sync] upsert fail', e) } } }
-      // aplica en lote para no disparar listeners por cada shape
+    const applyRemote = ({ from, ts, upserts = [], deletes = [] }) => {
+      if (from === socket.id) return
+      isApplyingRemote.current = true
+      const now = Date.now()
+
+      const run = () => {
+        // 1) upserts (ignorando los que están en tombstone vigente)
+        for (const s of upserts) {
+          const tomb = tombstonesRef.current.get(s.id)
+          if (tomb && tomb > now) continue // sigue “borrada”, no la revivas
+          try { upsertOne(s) } catch (e) { console.warn('[sync] upsert fail', e) }
+        }
+        // 2) deletes (al final, para que ganen)
+        if (deletes.length) {
+          try {
+            if (typeof editor.deleteShapes === 'function') editor.deleteShapes(deletes)
+            else deletes.forEach(id => editor.deleteShape?.(id))
+          } catch (e) { console.warn('[sync] delete fail', e) }
+          // marca tombstones por 2s
+          const expire = now + 2000
+          for (const id of deletes) tombstonesRef.current.set(id, expire)
+        }
+      }
+
       if (typeof editor.store.mergeRemoteChanges === 'function') editor.store.mergeRemoteChanges(run)
       else if (typeof editor.batch === 'function') editor.batch(run)
       else run()
+
+      // Actualiza prevIds local para que el próximo diff no “resucite” lo borrado
+      const currIds = new Set(editor.getCurrentPageShapes().map(s => s.id))
+      prevIdsRef.current = currIds
+
+      isApplyingRemote.current = false
     }
 
-    const handleReceiveShapes = ({ from, shapes }) => {
-      try {
-        if (from === socket.id) return          // ignora eco
-        if (!Array.isArray(shapes) || !shapes.length) return
-        isApplyingRemote.current = true
-        applyRemote(shapes)
-      } catch (err) {
-        console.error('[sync] apply error:', err)
-      } finally {
-        isApplyingRemote.current = false
-      }
-    }
-
-    socket.on('receiveShapes', handleReceiveShapes)
-    return () => socket.off('receiveShapes', handleReceiveShapes)
-  }, [editor, roomName])
+    socket.on('receiveShapes', applyRemote)
+    return () => socket.off('receiveShapes', applyRemote)
+  }, [editor])
 
   return null
 }
+
 
 /* =========================
    Editor principal
