@@ -67,3 +67,30 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 } */
+ /* --- Robot launcher animations --- */
+@keyframes rb_bob {
+  0%,100% { transform: translateY(0) }
+  50% { transform: translateY(-4px) }
+}
+@keyframes rb_pulse {
+  0% { transform: scale(1); opacity: .7 }
+  70% { transform: scale(1.25); opacity: 0 }
+  100% { opacity: 0 }
+}
+@keyframes rb_blink {
+  0%, 92%, 100% { transform: scaleY(1) }
+  95% { transform: scaleY(0.15) }
+}
+@keyframes rb_wave {
+  0% { transform: rotate(0deg) }
+  20% { transform: rotate(16deg) }
+  40% { transform: rotate(-10deg) }
+  60% { transform: rotate(12deg) }
+  80% { transform: rotate(-6deg) }
+  100% { transform: rotate(0deg) }
+}
+/* respeto a usuarios con reduce motion */
+@media (prefers-reduced-motion: reduce) {
+  .rb-anim, .rb-pulse, .rb-blink, .rb-wave { animation: none !important; }
+}
+

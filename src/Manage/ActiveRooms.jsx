@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { socket } from '../figma/socketService';  // Asegúrate de que esta importación esté correcta
+import { socket } from '../ER_diagram/socketService';  // Asegúrate de que esta importación esté correcta
 
 const ActiveRooms = () => {
   const [rooms, setRooms] = useState([]);
