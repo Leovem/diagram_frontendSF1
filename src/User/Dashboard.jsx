@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MyCanvas from '../ER_diagram/ER_editor';
-import DiagramViewer from '../Diagram/DiagramViewer';
 import CreateRoomModal from '../ER_diagram/CreateRoomModal';
 import FloatingRobot from '../ai/FloatingRobot';
 

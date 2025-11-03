@@ -1,4 +1,4 @@
-// src/ER_diagram/MyEditor.jsx
+// src/ER_diagram/ER_editor.jsx
 import React, { useEffect, useState } from 'react';
 import { Tldraw, useEditor } from 'tldraw';
 import 'tldraw/tldraw.css';
