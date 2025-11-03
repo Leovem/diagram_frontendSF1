@@ -1,7 +1,7 @@
 // src/ER_diagram/ui/ERPalette.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useEditor } from 'tldraw';
-import { useVoiceRelations } from '../../voice/useVoiceRelations'; 
+import { useVoiceRelations } from '../../voice/useVoiceRelations';
 const IconBtn = ({ onClick, title, children, className = '', ...rest }) => (
   <button
     onClick={onClick}
@@ -59,8 +59,8 @@ const ERPalette = () => {
     clearTimeout(autohideRef.current);
     const ms =
       feedback?.type === 'error' ? 5000 :
-      feedback?.type === 'success' ? 2800 :
-      2800; // hint / success
+        feedback?.type === 'success' ? 2800 :
+          2800; // hint / success
     autohideRef.current = setTimeout(() => setShowFeedback(false), ms);
     return () => clearTimeout(autohideRef.current);
   }, [showFeedback, feedback]);
@@ -127,15 +127,26 @@ const ERPalette = () => {
 
   // Crear relación con preset
   const createRelationPreset = (preset) => {
+    console.log(preset);
     try {
       const vb = editor.getViewportPageBounds();
       const cx = vb.x + vb.w / 2;
       const cy = vb.y + vb.h / 2;
 
-      let aCard = '1', bCard = '1..*', name = 'relacion';
+      let aCard = '1', bCard = '1..*', name = 'relacion', relationType = 'association';
       if (preset === '1-1') { aCard = '1'; bCard = '1'; name = 'uno_a_uno'; }
       if (preset === '1-N') { aCard = '1'; bCard = '1..*'; name = 'uno_a_muchos'; }
       if (preset === 'N-N') { aCard = '1..*'; bCard = '1..*'; name = 'muchos_a_muchos'; }
+
+      if (preset === 'inheritance') {
+        relationType = 'inheritance'; name = 'hereda'; aCard = '-1'; bCard = '-1';
+      }
+      if (preset === 'composition') {
+        relationType = 'composition'; name = 'compone'; aCard = '-2'; bCard = '-2';
+      }
+      if (preset === 'aggregation') {
+        relationType = 'aggregation'; name = 'agrega'; aCard = '-3'; bCard = '-3';
+      }
 
       editor.createShape({
         type: 'relation-edge',
@@ -152,6 +163,7 @@ const ERPalette = () => {
           orthogonal: false,
           identifying: false,
           name,
+          relationType,
         },
       });
 
@@ -172,8 +184,8 @@ const ERPalette = () => {
 
   const badgeColor =
     (feedback?.type === 'error') ? 'bg-rose-500' :
-    (feedback?.type === 'success') ? 'bg-emerald-500' :
-    'bg-slate-400';
+      (feedback?.type === 'success') ? 'bg-emerald-500' :
+        'bg-slate-400';
 
   return (
     <div className="absolute top-4 left-4 z-[1000]" style={{ pointerEvents: 'none' }}>
@@ -195,6 +207,10 @@ const ERPalette = () => {
                 <button onClick={() => createRelationPreset('1-1')} className="block w-40 text-left px-3 py-2 text-sm hover:bg-slate-50" role="menuitem">1 — 1 (uno a uno)</button>
                 <button onClick={() => createRelationPreset('1-N')} className="block w-40 text-left px-3 py-2 text-sm hover:bg-slate-50" role="menuitem">1 — N (uno a muchos)</button>
                 <button onClick={() => createRelationPreset('N-N')} className="block w-40 text-left px-3 py-2 text-sm hover:bg-slate-50" role="menuitem" title="M:N – podrás crear tabla intermedia desde la relación">N — N (muchos a muchos)</button>
+                <hr className="my-1 border-slate-200" />
+                <button onClick={() => createRelationPreset('inheritance')} className="block w-40 text-left px-3 py-2 text-sm hover:bg-slate-50" role="menuitem">Herencia</button>
+                <button onClick={() => createRelationPreset('composition')} className="block w-40 text-left px-3 py-2 text-sm hover:bg-slate-50" role="menuitem">Composición</button>
+                <button onClick={() => createRelationPreset('aggregation')} className="block w-40 text-left px-3 py-2 text-sm hover:bg-slate-50" role="menuitem">Agregación</button>
               </div>
             )}
           </div>
@@ -235,8 +251,8 @@ const ERPalette = () => {
                 <div className="mt-1 text-[11px] leading-relaxed">
                   <p className={
                     feedback?.type === 'success' ? 'text-emerald-300'
-                    : feedback?.type === 'error' ? 'text-rose-300'
-                    : 'text-slate-300'
+                      : feedback?.type === 'error' ? 'text-rose-300'
+                        : 'text-slate-300'
                   }>
                     {feedback?.message || 'Di: "Crea relación uno a muchos de Usuarios a Pedidos".'}
                   </p>

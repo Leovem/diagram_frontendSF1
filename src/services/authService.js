@@ -87,3 +87,19 @@ export const deleteRole = async (id) => {
   const { data } = await api.delete('roles/delete', { data: { id } });
   return data;
 };
+
+export const generateFlutterProject = async (payload) => {
+  try {
+    const response = await api.post(
+      'generate/generate-flutter-project',
+      payload,
+      {
+        responseType: 'blob'
+      }
+    );
+    return response.data;
+
+  } catch (error) {
+    throw new Error(error.response?.data?.msg || 'Error al generar el proyecto Flutter.');
+  }
+};
