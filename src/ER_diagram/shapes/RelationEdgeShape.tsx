@@ -17,8 +17,9 @@ import type { EntityTableShapeType } from './EntityTableShape'
 /* =====================================
    Tipos y constantes
 ===================================== */
-export type Cardinality = '1' | '0..1' | '1..*' | '0..*'
-const CARDINALITIES: Cardinality[] = ['1', '0..1', '1..*', '0..*']
+export type Cardinality = '1' | '0..1' | '1..*' | '0..*' | '-1' | '-2' | '-3'
+const CARDINALITIES: Cardinality[] = ['1', '0..1', '1..*', '0..*', '-1', '-2', '-3']
+export type RelationType = 'association' | 'inheritance' | 'composition' | 'aggregation'
 
 type Pt = { x: number; y: number }
 
@@ -37,11 +38,12 @@ export type RelationEdgeShapeType = TLBaseShape<
     name: string
     isDragging?: boolean
     hoveredSegment?: number
+    relationType: RelationType
   }
 >
 
-const HANDLE_R = 8
-const WAYPOINT_R = 6
+const HANDLE_R = 4
+const WAYPOINT_R = 2
 const SEGMENT_HOVER_WIDTH = 12
 const SNAP_DISTANCE = 30
 
@@ -164,7 +166,7 @@ function selectIds(editor: any, ids: TLShapeId[]) {
 /* =====================================
    Marcadores (cardinalidades)
 ===================================== */
-const Markers = React.memo(({ at, dir, card, color, size = 16 }: { at: Pt; dir: Pt; card: Cardinality; color: string; size?: number }) => {
+const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isAEnd }: { at: Pt; dir: Pt; card: Cardinality; color: string; size?: number; relationType: RelationType; isAEnd: boolean }) => {
   const n = React.useMemo(() => ({ x: -dir.y, y: dir.x }), [dir.x, dir.y])
   const W = size * 0.6
   const barOff = size
@@ -194,12 +196,83 @@ const Markers = React.memo(({ at, dir, card, color, size = 16 }: { at: Pt; dir: 
     elements.push(<circle key={`circle-${offset}`} cx={at.x + off.x} cy={at.y + off.y} r={circleR} stroke={color} fill="none" strokeWidth={2} />)
   }
 
-  switch (card) {
-    case '1': drawBar(); break
-    case '0..1': drawBar(); drawCircle(6); break
-    case '1..*': drawBar(); drawCrow(); break
-    case '0..*': drawCircle(); drawCrow(); break
+  const drawTriangle = (offset: number = 0) => {
+    const V = size
+    const H = size * 0.7
+    const p0 = { x: at.x, y: at.y }
+    const p1 = {
+      x: at.x - dir.x * V + n.x * H / 2,
+      y: at.y - dir.y * V + n.y * H / 2
+    }
+    const p2 = {
+      x: at.x - dir.x * V - n.x * H / 2,
+      y: at.y - dir.y * V - n.y * H / 2
+    }
+    elements.push(
+      <polygon
+        key="triangle"
+        points={`${p0.x},${p0.y} ${p1.x},${p1.y} ${p2.x},${p2.y}`}
+        stroke={color}
+        strokeWidth={2}
+        fill="#ffffff"
+      />
+    )
   }
+
+  const drawDiamond = (filled: boolean) => {
+    const R = size * 0.4
+    const L = size * 0.8
+
+    const p0 = { x: at.x, y: at.y }
+
+    const p1 = {
+      x: at.x - dir.x * L / 2 + n.x * R,
+      y: at.y - dir.y * L / 2 + n.y * R
+    }
+
+    const p2 = {
+      x: at.x - dir.x * L,
+      y: at.y - dir.y * L
+    }
+
+    const p3 = {
+      x: at.x - dir.x * L / 2 - n.x * R,
+      y: at.y - dir.y * L / 2 - n.y * R
+    }
+
+    elements.push(
+      <polygon
+        key="diamond"
+        points={`${p0.x},${p0.y} ${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`}
+        stroke={color}
+        strokeWidth={2}
+        fill={filled ? color : '#ffffff'}
+      />
+    )
+  }
+
+
+  if (relationType === 'inheritance') {
+    if (!isAEnd) {
+      drawTriangle()
+    }
+  } else if (relationType === 'composition') {
+    if (!isAEnd) {
+      drawDiamond(true)
+    }
+  } else if (relationType === 'aggregation') {
+    if (!isAEnd) {
+      drawDiamond(false)
+    }
+  } else if (relationType === 'association') {
+    switch (card) {
+      case '1': drawBar(); break
+      case '0..1': drawBar(); drawCircle(6); break
+      case '1..*': drawBar(); drawCrow(); break
+      case '0..*': drawCircle(); drawCrow(); break
+    }
+  }
+
   return <g>{elements}</g>
 })
 
@@ -252,14 +325,14 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
     e.stopPropagation()
     e.preventDefault()
     const el = e.currentTarget as HTMLElement
-    
+
     if ('setPointerCapture' in el) el.setPointerCapture(e.pointerId)
-       try {
-        const current = (editor.getSelectedShapeIds?.() ?? []) as TLShapeId[]
-        if (!current.includes(shape.id as TLShapeId)) {
-          selectIds(editor, [shape.id as TLShapeId])
-        }
-      } catch {}
+    try {
+      const current = (editor.getSelectedShapeIds?.() ?? []) as TLShapeId[]
+      if (!current.includes(shape.id as TLShapeId)) {
+        selectIds(editor, [shape.id as TLShapeId])
+      }
+    } catch { }
 
     const pagePoint = getPagePoint(e)
 
@@ -419,6 +492,7 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
 ===================================== */
 const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ shape }) => {
   const editor = useEditor()
+  const showCardText = shape.props.relationType === 'association';
 
   // Reacciona a selección sin forzar renders extra
   const selected = useValue(
@@ -546,8 +620,22 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
           <path d={d} stroke={color} strokeWidth={width} fill="none" style={{ pointerEvents: 'none' }} />
 
           {/* 4) Marcadores */}
-          <Markers at={{ x: points[0].x - shape.x, y: points[0].y - shape.y }} dir={{ x: -tStart.x, y: -tStart.y }} card={shape.props.aCard} color={color} />
-          <Markers at={{ x: points[points.length - 1].x - shape.x, y: points[points.length - 1].y - shape.y }} dir={tEnd} card={shape.props.bCard} color={color} />
+          <Markers
+            at={{ x: points[0].x - shape.x, y: points[0].y - shape.y }}
+            dir={{ x: -tStart.x, y: -tStart.y }}
+            card={shape.props.aCard}
+            relationType={shape.props.relationType}
+            color={color}
+            isAEnd={true}
+          />
+          <Markers
+            at={{ x: points[points.length - 1].x - shape.x, y: points[points.length - 1].y - shape.y }}
+            dir={tEnd}
+            card={shape.props.bCard}
+            relationType={shape.props.relationType}
+            color={color}
+            isAEnd={false}
+          />
 
           {/* 5) Waypoints (Alt/Middle click para borrar) */}
           {shape.props.waypoints.map((p, i) => (
@@ -587,17 +675,21 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
         </svg>
 
         {/* Etiquetas de cardinalidad */}
-        <div style={{
-          position: 'absolute', left: aTarget.x - shape.x + 12, top: aTarget.y - shape.y - 20,
-          fontSize: 12, fontWeight: 600, color, pointerEvents: 'none',
-          background: 'white', padding: '2px 6px', borderRadius: 4, border: `1px solid ${color}`,
-        }}>{shape.props.aCard}</div>
+        {showCardText && (
+          <div style={{
+            position: 'absolute', left: aTarget.x - shape.x + 12, top: aTarget.y - shape.y - 20,
+            fontSize: 12, fontWeight: 600, color, pointerEvents: 'none',
+            background: 'white', padding: '2px 6px', borderRadius: 4, border: `1px solid ${color}`,
+          }}>{shape.props.aCard}</div>
+        )}
 
-        <div style={{
-          position: 'absolute', left: bTarget.x - shape.x + 12, top: bTarget.y - shape.y - 20,
-          fontSize: 12, fontWeight: 600, color, pointerEvents: 'none',
-          background: 'white', padding: '2px 6px', borderRadius: 4, border: `1px solid ${color}`,
-        }}>{shape.props.bCard}</div>
+        {showCardText && (
+          <div style={{
+            position: 'absolute', left: bTarget.x - shape.x + 12, top: bTarget.y - shape.y - 20,
+            fontSize: 12, fontWeight: 600, color, pointerEvents: 'none',
+            background: 'white', padding: '2px 6px', borderRadius: 4, border: `1px solid ${color}`,
+          }}>{shape.props.bCard}</div>
+        )}
 
         {/* Nombre de la relación */}
         {shape.props.name && (
@@ -639,6 +731,7 @@ export class RelationEdgeShapeUtil extends ShapeUtil<RelationEdgeShapeType> {
     name: T.string,
     isDragging: T.boolean.optional(),
     hoveredSegment: T.number.optional(),
+    relationType: T.literalEnum('association', 'inheritance', 'composition', 'aggregation'),
   }
 
   override getDefaultProps(): RelationEdgeShapeType['props'] {
@@ -653,6 +746,7 @@ export class RelationEdgeShapeUtil extends ShapeUtil<RelationEdgeShapeType> {
       orthogonal: true,
       identifying: false,
       name: '',
+      relationType: 'association',
     }
   }
 

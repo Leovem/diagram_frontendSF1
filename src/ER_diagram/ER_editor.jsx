@@ -116,8 +116,20 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
     const cA = cardA.toLowerCase();
     const cB = cardB.toLowerCase();
 
+    if (cA === '-1' || cB === '-1') {
+      return 'inheritance';
+    }
+
+    if (cA === '-2' || cB === '-2') {
+      return 'composition';
+    }
+
+    if (cA === '-3' || cB === '-3') {
+      return 'aggregation';
+    }
+
     const isMany = (card) => card === 'n' || card === 'm' || card === '1..*';
-    
+
     const isOne = (card) => card === '1' || card === '0-1';
 
     if (isOne(cA) && isOne(cB)) {
@@ -133,11 +145,11 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
     }
 
     if (isMany(cA) && isOne(cB)) {
-      return 'one_to_many'; 
+      return 'one_to_many';
     }
 
     return 'unknown_relationship';
-}
+  }
 
   function mapTypeToBackend(internalType) {
     const type = internalType.toLowerCase();
@@ -164,7 +176,7 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
 
     const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
     return `${baseName}_${timestamp}.${extension}`;
-}
+  }
 
   return (
     <div className="absolute top-2 left-2 z-[1000] flex gap-2">

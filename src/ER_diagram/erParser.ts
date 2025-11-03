@@ -182,7 +182,19 @@ function sanitizeEntityName(input: string | undefined): string {
 
 function cardinalityOrDefault(input: string | undefined): Cardinality {
   const v = (input ?? '').trim();
-  if (v === '1' || v === '0..1' || v === '1..*' || v === '0..*') return v;
+
+  if (
+    v === '1' ||
+    v === '0..1' ||
+    v === '1..*' ||
+    v === '0..*' ||
+    v === '-1' ||
+    v === '-2' ||
+    v === '-3'
+  ) {
+    return v as Cardinality;
+  }
+
   return '1';
 }
 
