@@ -11,8 +11,113 @@ import {
   idValidator,
   useEditor,
   useValue,
+  createShapeId,
 } from 'tldraw'
 import type { EntityTableShapeType } from './EntityTableShape'
+
+
+/* ============================
+   Helpers para asociativa N:N
+   ============================ */
+
+const MANY_SET = ['1..*', '0..*', 'N', 'n', 'M', 'm']
+
+function isMany(card?: string): boolean {
+  if (!card) return false
+  return MANY_SET.includes(card.trim())
+}
+
+/*====================================
+Helpers
+=====================================*/
+
+function calcHeight(attrCount: number) {
+  return 60 + attrCount * 28
+}
+
+async function createAssociativeEntityAndRelations(
+  editor: any,
+  aId: TLShapeId,
+  bId: TLShapeId,
+  opts?: { assocName?: string; removeOriginalRelationId?: TLShapeId }
+) {
+  const aShape = editor.getShape(aId)
+  const bShape = editor.getShape(bId)
+  if (!aShape || !bShape) return null
+
+  const aBounds = editor.getShapePageBounds(aShape)
+  const bBounds = editor.getShapePageBounds(bShape)
+  if (!aBounds || !bBounds) return null
+
+  const mid = {
+    x: (aBounds.x + bBounds.x + bBounds.w + aBounds.w) / 2 / 2,
+    y: (aBounds.y + bBounds.y + aBounds.h + bBounds.h) / 2 / 2,
+  }
+
+  const aName = (aShape.props?.name ?? "A").replace(/\s+/g, "_")
+  const bName = (bShape.props?.name ?? "B").replace(/\s+/g, "_")
+  const assocName = opts?.assocName ?? `Detalle_${aName}_${bName}`
+
+  // Tabla asociativa con PK compuesta (id_A + id_B)
+  // Esto permite agregar atributos adicionales sin necesidad de un ID surrogate
+  const assocAttrs = [
+    { id: createShapeId(), name: `id_${aName}`, type: "uuid", pk: true, unique: false, nullable: false },  // ✅ Parte 1 de PK compuesta
+    { id: createShapeId(), name: `id_${bName}`, type: "uuid", pk: true, unique: false, nullable: false },  // ✅ Parte 2 de PK compuesta
+  ]
+
+  const assocShape: TLShapePartial<any> = {
+    id: createShapeId(),
+    type: "entity-table",
+    x: mid.x - 160,
+    y: mid.y - 80,
+    props: {
+      w: 320,
+      h: calcHeight(assocAttrs.length),
+      name: assocName,
+      attrs: assocAttrs,
+    },
+  }
+
+  const relA: TLShapePartial<any> = {
+    id: createShapeId(),
+    type: "relation-edge",
+    x: assocShape.x,
+    y: assocShape.y,
+    props: {
+      aEntityId: assocShape.id,
+      bEntityId: aId,
+      aCard: "1..*",  // CORREGIDO: Muchos detalles
+      bCard: "1",     // CORREGIDO: Un libro
+      relationType: "association",
+      name: `${assocName}_${aName}`,
+    },
+  }
+
+  const relB: TLShapePartial<any> = {
+    id: createShapeId(),
+    type: "relation-edge",
+    x: assocShape.x,
+    y: assocShape.y,
+    props: {
+      aEntityId: assocShape.id,
+      bEntityId: bId,
+      aCard: "1..*",  // CORREGIDO: Muchos detalles
+      bCard: "1",     // CORREGIDO: Un usuario
+      relationType: "association",
+      name: `${assocName}_${bName}`,
+    },
+  }
+
+  editor.createShapes([assocShape, relA, relB])
+
+  if (opts?.removeOriginalRelationId) {
+    editor.deleteShapes([opts.removeOriginalRelationId])
+  }
+
+  return { assocId: assocShape.id, relAId: relA.id, relBId: relB.id }
+}
+
+
 
 /* =====================================
    Tipos y constantes
@@ -72,17 +177,14 @@ const geom = {
     return editor.getShapePageBounds(s)
   },
 
-  // Puertos discretos (centros de lados + esquinas) para anclar extremos
   rectPorts: (r: { x: number; y: number; w: number; h: number }) => {
     const cx = r.x + r.w / 2
     const cy = r.y + r.h / 2
     return [
-      // centros de lados
-      { x: r.x, y: cy }, // left
-      { x: r.x + r.w, y: cy }, // right
-      { x: cx, y: r.y }, // top
-      { x: cx, y: r.y + r.h }, // bottom
-      // esquinas
+      { x: r.x, y: cy },
+      { x: r.x + r.w, y: cy },
+      { x: cx, y: r.y },
+      { x: cx, y: r.y + r.h },
       { x: r.x, y: r.y },
       { x: r.x + r.w, y: r.y },
       { x: r.x, y: r.y + r.h },
@@ -90,7 +192,6 @@ const geom = {
     ]
   },
 
-  // El puerto más cercano en función de hacia dónde "mira" la arista
   closestPortTowards: (
     rect: { x: number; y: number; w: number; h: number },
     towards: Pt
@@ -148,7 +249,6 @@ const geom = {
     }
   },
 
-  // Distancia mínima de un punto a un rectángulo (0 si está dentro)
   distanceToRect: (p: Pt, r: { x: number; y: number; w: number; h: number }) => {
     const dx = Math.max(r.x - p.x, 0, p.x - (r.x + r.w))
     const dy = Math.max(r.y - p.y, 0, p.y - (r.y + r.h))
@@ -164,7 +264,7 @@ function selectIds(editor: any, ids: TLShapeId[]) {
 
 
 /* =====================================
-   Marcadores (cardinalidades)
+   Marcadores (cardinalidades) - CORREGIDOS
 ===================================== */
 const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isAEnd }: { at: Pt; dir: Pt; card: Cardinality; color: string; size?: number; relationType: RelationType; isAEnd: boolean }) => {
   const n = React.useMemo(() => ({ x: -dir.y, y: dir.x }), [dir.x, dir.y])
@@ -196,7 +296,7 @@ const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isA
     elements.push(<circle key={`circle-${offset}`} cx={at.x + off.x} cy={at.y + off.y} r={circleR} stroke={color} fill="none" strokeWidth={2} />)
   }
 
-  const drawTriangle = (offset: number = 0) => {
+  const drawTriangle = () => {
     const V = size
     const H = size * 0.7
     const p0 = { x: at.x, y: at.y }
@@ -224,17 +324,14 @@ const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isA
     const L = size * 0.8
 
     const p0 = { x: at.x, y: at.y }
-
     const p1 = {
       x: at.x - dir.x * L / 2 + n.x * R,
       y: at.y - dir.y * L / 2 + n.y * R
     }
-
     const p2 = {
       x: at.x - dir.x * L,
       y: at.y - dir.y * L
     }
-
     const p3 = {
       x: at.x - dir.x * L / 2 - n.x * R,
       y: at.y - dir.y * L / 2 - n.y * R
@@ -251,7 +348,7 @@ const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isA
     )
   }
 
-
+  // LÓGICA CORREGIDA: Los símbolos especiales solo se dibujan en el extremo B (isAEnd=false)
   if (relationType === 'inheritance') {
     if (!isAEnd) {
       drawTriangle()
@@ -265,6 +362,7 @@ const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isA
       drawDiamond(false)
     }
   } else if (relationType === 'association') {
+    // Para asociaciones, dibujamos cardinalidades en ambos extremos
     switch (card) {
       case '1': drawBar(); break
       case '0..1': drawBar(); drawCircle(6); break
@@ -277,12 +375,12 @@ const Markers = React.memo(({ at, dir, card, color, size = 16, relationType, isA
 })
 
 /* =====================================
-   Hook de drag (opt)
+   Hook de drag
 ===================================== */
 const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof useEditor>, getPointsMemo: () => { points: Pt[]; aTarget: Pt; bTarget: Pt }) => {
   type DragState =
     | { kind: 'end'; end: 'a' | 'b' }
-    | { kind: 'wp'; index: number; start: Pt } // guarda inicio para bloqueo con Shift
+    | { kind: 'wp'; index: number; start: Pt }
     | { kind: 'segment'; segmentIndex: number; initialPoint: Pt }
     | { kind: 'path'; start: Pt; a0: Pt; b0: Pt; wps0: Pt[]; aConn: boolean; bConn: boolean }
 
@@ -398,7 +496,6 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
     const { points } = getPointsMemo()
 
     if (!dragState.current) {
-      // hover de segmento (throttled RAF)
       const pagePoint = getPagePoint(e)
       const segmentIndex = findClosestSegment(pagePoint, points)
       setHoveredSegment(segmentIndex !== -1 ? segmentIndex : undefined)
@@ -459,7 +556,6 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
     setIsDragging(false)
     patch({ isDragging: false, hoveredSegment: undefined })
 
-    // Snap a entidad si soltaste un extremo
     if (state.kind === 'end') {
       const pagePoint = getPagePoint(e)
       const entities = editor.getCurrentPageShapes().filter(s => s.type === 'entity-table') as EntityTableShapeType[]
@@ -471,6 +567,21 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
         if (state.end === 'a') patch({ aEntityId: target.id })
         else patch({ bEntityId: target.id })
       }
+
+      setTimeout(async () => {
+        const aId = (shape.props.aEntityId ?? (state.kind === 'end' && state.end === 'a' ? target?.id : null)) as TLShapeId | null
+        const bId = (shape.props.bEntityId ?? (state.kind === 'end' && state.end === 'b' ? target?.id : null)) as TLShapeId | null
+
+        if (aId && bId) {
+          if (shape.props.relationType === 'association' && isMany(shape.props.aCard) && isMany(shape.props.bCard)) {
+            try {
+              await createAssociativeEntityAndRelations(editor, aId, bId, { assocName: undefined, removeOriginalRelationId: shape.id })
+            } catch (err) {
+              console.error('Error creando entidad intermedia:', err)
+            }
+          }
+        }
+      }, 0)
     }
   }, [editor, getPagePoint, patch])
 
@@ -488,20 +599,18 @@ const useRelationDrag = (shape: RelationEdgeShapeType, editor: ReturnType<typeof
 }
 
 /* =====================================
-   Componente principal
+   Componente principal - LÍNEAS CORREGIDAS
 ===================================== */
 const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ shape }) => {
   const editor = useEditor()
   const showCardText = shape.props.relationType === 'association';
 
-  // Reacciona a selección sin forzar renders extra
   const selected = useValue(
     'rel-selected',
     () => editor.getSelectedShapeIds().includes(shape.id),
     [editor, shape.id]
   )
 
-  // Bounds reactivos de entidades conectadas
   const aBounds = useValue(
     'a-bounds',
     () => geom.getEntityBounds(editor, shape.props.aEntityId),
@@ -513,7 +622,6 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
     [editor, shape.props.bEntityId]
   )
 
-  // Memo: targets + puntos de la ruta
   const getPoints = React.useCallback(() => {
     const aTarget: Pt = shape.props.aEntityId && bBounds
       ? geom.closestPortTowards(aBounds!, { x: bBounds.x + bBounds.w / 2, y: bBounds.y + bBounds.h / 2 })
@@ -529,18 +637,29 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
 
   const { points, aTarget, bTarget } = React.useMemo(getPoints, [getPoints])
 
-  const d = React.useMemo(
-    () => points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x - shape.x} ${p.y - shape.y}`).join(' '),
-    [points, shape.x, shape.y]
-  )
+  const d = React.useMemo(() => {
+    if (points.length < 2) return ''
+    let path = `M ${points[0].x - shape.x} ${points[0].y - shape.y}`
+    for (let i = 1; i < points.length; i++) {
+      path += ` L ${points[i].x - shape.x} ${points[i].y - shape.y}`
+    }
+    return path
+  }, [points, shape.x, shape.y])
 
   const tStart = React.useMemo(() => geom.tangentAtEnd(points, 'start'), [points])
   const tEnd = React.useMemo(() => geom.tangentAtEnd(points, 'end'), [points])
 
-  const color = selected ? '#0ea5e9' : (shape.props.isDragging ? '#60a5fa' : '#334155')
-  const width = shape.props.identifying ? 3 : 2
+  // ESTILOS DE LÍNEA CORREGIDOS SEGÚN TIPO DE RELACIÓN
+  const color = selected ? '#007ACC' : (shape.props.isDragging ? '#2B6CB0' : '#6B7280')
+  const width = shape.props.identifying ? 2.2 : 1.8
+  
+  // Estilos específicos por tipo de relación:
+  // - Association (1:1, 1:*, M:M): línea continua
+  // - Inheritance: línea continua (con triángulo vacío)
+  // - Composition: línea continua (con diamante relleno) 
+  // - Aggregation: línea continua (con diamante vacío)
+  const dashArray = 'none' // Todas las relaciones usan línea continua
 
-  // Pre-render de overlays de segmentos (memorizado)
   const segmentOverlays = React.useMemo(() => {
     const items: React.ReactNode[] = []
     for (let i = 0; i < points.length - 1; i++) {
@@ -566,7 +685,6 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
   const { handlePointerDown, handlePointerMove, handlePointerUp, hoveredSegment } =
     useRelationDrag(shape, editor, () => ({ points, aTarget, bTarget }))
 
-  // Delegamos el click de segmentos a handlePointerDown('segment')
   const onSegmentPointerDown = React.useCallback((e: React.PointerEvent<SVGPathElement>) => {
     handlePointerDown(e, 'segment')
   }, [handlePointerDown])
@@ -579,7 +697,7 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
         onPointerUp={handlePointerUp}
       >
         <svg style={{ position: 'absolute', left: 0, top: 0, overflow: 'visible' }} width={1} height={1}>
-          {/* 1) Área de arrastre global + DblClick alterna ortogonal */}
+          {/* Área de arrastre global */}
           <path
             d={d}
             stroke="transparent"
@@ -598,8 +716,7 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
             }}
           />
 
-          {/* 2) Segmentos "clickables" (inserción/drag de waypoint) */}
-          {/* además, sombreado al hover */}
+          {/* Segmentos clickables con hover */}
           {points.slice(0, -1).map((p1, i) => {
             const p2 = points[i + 1]
             const segmentD = `M ${p1.x - shape.x} ${p1.y - shape.y} L ${p2.x - shape.x} ${p2.y - shape.y}`
@@ -616,10 +733,17 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
             )
           })}
 
-          {/* 3) Línea principal */}
-          <path d={d} stroke={color} strokeWidth={width} fill="none" style={{ pointerEvents: 'none' }} />
+          {/* Línea principal - SIEMPRE CONTINUA */}
+          <path 
+            d={d} 
+            stroke={color} 
+            strokeWidth={width} 
+            fill="none" 
+            strokeDasharray={dashArray}
+            style={{ pointerEvents: 'none' }} 
+          />
 
-          {/* 4) Marcadores */}
+          {/* Marcadores de cardinalidad o símbolos especiales */}
           <Markers
             at={{ x: points[0].x - shape.x, y: points[0].y - shape.y }}
             dir={{ x: -tStart.x, y: -tStart.y }}
@@ -637,7 +761,7 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
             isAEnd={false}
           />
 
-          {/* 5) Waypoints (Alt/Middle click para borrar) */}
+          {/* Waypoints */}
           {shape.props.waypoints.map((p, i) => (
             <g key={i} transform={`translate(${p.x}, ${p.y})`}>
               <circle
@@ -665,7 +789,7 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
             </g>
           ))}
 
-          {/* 6) Handles de extremos */}
+          {/* Handles de extremos */}
           <g transform={`translate(${aTarget.x - shape.x}, ${aTarget.y - shape.y})`}>
             <circle r={HANDLE_R} fill="#ffffff" stroke={color} strokeWidth={2} onPointerDown={(e) => handlePointerDown(e, 'end', 'a')} style={{ cursor: 'grab' }} />
           </g>
@@ -674,7 +798,7 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
           </g>
         </svg>
 
-        {/* Etiquetas de cardinalidad */}
+        {/* Etiquetas de cardinalidad - SOLO PARA ASSOCIATION */}
         {showCardText && (
           <div style={{
             position: 'absolute', left: aTarget.x - shape.x + 12, top: aTarget.y - shape.y - 20,
@@ -689,23 +813,6 @@ const RelationEdgeComponent: React.FC<{ shape: RelationEdgeShapeType }> = ({ sha
             fontSize: 12, fontWeight: 600, color, pointerEvents: 'none',
             background: 'white', padding: '2px 6px', borderRadius: 4, border: `1px solid ${color}`,
           }}>{shape.props.bCard}</div>
-        )}
-
-        {/* Nombre de la relación */}
-        {shape.props.name && (
-          <div
-            style={{
-              position: 'absolute',
-              left: (aTarget.x + bTarget.x) / 2 - shape.x,
-              top: (aTarget.y + bTarget.y) / 2 - shape.y - 25,
-              transform: 'translate(-50%, -50%)',
-              fontSize: 12, fontWeight: 600, color,
-              pointerEvents: 'none', background: 'white', padding: '4px 8px',
-              borderRadius: 4, border: `1px solid ${color}`, whiteSpace: 'nowrap',
-            }}
-          >
-            {shape.props.name}
-          </div>
         )}
       </div>
     </HTMLContainer>
@@ -761,7 +868,6 @@ export class RelationEdgeShapeUtil extends ShapeUtil<RelationEdgeShapeType> {
   override canReceiveNewChildrenOfType() { return false }
 }
 
-/* (opcionales) estilos/reusables */
 const btnPrimary: React.CSSProperties = {
   padding: '8px 10px', borderRadius: 8, border: '1px solid #e5e7eb',
   background: '#0ea5e9', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 700,

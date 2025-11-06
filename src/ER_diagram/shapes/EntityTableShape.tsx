@@ -31,6 +31,7 @@ export type EntityTableShapeType = TLBaseShape<
     h: number
     name: string
     attrs: EntityAttr[]
+    isJoinTable?: boolean
   }
 >
 
@@ -163,6 +164,8 @@ export class EntityTableShapeUtil extends ShapeUtil<EntityTableShapeType> {
         nullable: T.boolean.optional(),
       })
     ),
+    isJoinTable: T.boolean.optional(),
+
   }
 
   override getDefaultProps(): EntityTableShapeType['props'] {
@@ -171,6 +174,7 @@ export class EntityTableShapeUtil extends ShapeUtil<EntityTableShapeType> {
       h: MIN_H,
       name: 'Entidad',
       attrs: [],
+      isJoinTable: false,
     }
   }
 

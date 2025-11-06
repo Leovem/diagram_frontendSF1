@@ -2,6 +2,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useEditor } from 'tldraw';
 import { useVoiceRelations } from '../../voice/useVoiceRelations';
+import { useGeminiVision } from '../imageRecognition/useGeminiVision';
+import { convertToShapes } from '../imageRecognition/shapeConverter';
+
 const IconBtn = ({ onClick, title, children, className = '', ...rest }) => (
   <button
     onClick={onClick}
@@ -17,8 +20,14 @@ const IconBtn = ({ onClick, title, children, className = '', ...rest }) => (
   </button>
 );
 
+
+
+
+
+
 const ERPalette = () => {
   const editor = useEditor();
+  const { analyzeImage, loading, error: visionError } = useGeminiVision();
   const [showRelMenu, setShowRelMenu] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const relMenuRef = useRef(null);
@@ -44,6 +53,27 @@ const ERPalette = () => {
     if (!listening) setShowFeedback(false);
     listening ? stop() : start();
   };
+
+  const handleImageUpload = async (file) => {
+  if (!file) return;
+  try {
+    const response = await analyzeImage(file);
+
+    // ✅ Imprimir la respuesta completa de la IA
+    console.log('🧠 Respuesta completa de la IA:', response);
+
+    const jsonText = response.replace(/```(json)?/g, '').trim();
+    const data = JSON.parse(jsonText);
+
+    convertToShapes(data, editor);
+    setFeedback({ type: 'success', message: '✅ Diagrama reconocido e insertado.' });
+    setShowFeedback(true);
+  } catch (err) {
+    console.error('Error IA:', err);
+    setFeedback({ type: 'error', message: 'Error analizando imagen con IA.' });
+    setShowFeedback(true);
+  }
+};
 
   // Autohide según severidad
   useEffect(() => {
@@ -217,6 +247,25 @@ const ERPalette = () => {
 
           <IconBtn onClick={zoomToFit} title="Ajustar vista">🔍</IconBtn>
           <IconBtn onClick={clearCanvas} title="Limpiar todo">🧹</IconBtn>
+          {/* IA: reconocimiento de diagrama */}
+<div className="relative">
+  <IconBtn title="Importar desde imagen (IA)">
+    🧠
+    <input
+      type="file"
+      accept="image/*"
+      title="Cargar imagen de diagrama ER"
+      className="absolute inset-0 opacity-0 cursor-pointer"
+      onChange={(e) => handleImageUpload(e.target.files[0])}
+    />
+  </IconBtn>
+  {loading && (
+    <div className="absolute left-12 top-0 bg-white text-slate-800 text-xs px-2 py-1 rounded shadow">
+      Analizando imagen…
+    </div>
+  )}
+</div>
+
 
           {/* Mic */}
           <div className="relative">

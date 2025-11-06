@@ -25,7 +25,9 @@ export interface Entity {
   uniques?: string[];
   indexes?: string[];
   _tlShapeId?: TLShapeId; // trazabilidad con Tldraw
+  isJoinTable?: boolean;  // nueva propiedad
 }
+
 
 export interface RelationEnd {
   entityId: string;       // referencia a Entity.id
@@ -204,6 +206,7 @@ function cardinalityOrDefault(input: string | undefined): Cardinality {
 
 /**
  * Convierte shapes de Tldraw (entity-table / relation-edge) a un ERGraph.
+ * Corrige preservación de isJoinTable desde props y mejora detección automática.
  */
 export function shapesToERGraph(editor: Editor): ERGraph {
   // 1) Recolectar records del store
@@ -230,7 +233,22 @@ export function shapesToERGraph(editor: Editor): ERGraph {
 
     const finalAttrs: Attribute[] = ensurePrimaryKey(parsedAttrs);
 
+    // === ⚡️ Detección confiable de tablas intermedias ===
+    const pkCount = finalAttrs.filter(a => a.isPrimary).length;
+
+    // 1️⃣ Leer el valor original del shape (desde convertToShapes)
+    const isJoinFromShape =
+      (s.props as any)?.isJoinTable === true;
+
+    // 2️⃣ Si no viene del shape, usar heurística
+    const looksLikeJoin =
+      isJoinFromShape ||
+      /^detalle_|^rel_|^asoc_/i.test(name) ||               // nombres tipo Detalle_, Rel_, Asoc_
+      (pkCount > 1 && (name.includes('_') || name.includes('/'))) || // más de una PK y nombre compuesto
+      (name.toLowerCase().includes('detalle') && pkCount > 1);
+
     const entityId: string = crypto.randomUUID();
+
     entities.push({
       id: entityId,
       name,
@@ -238,15 +256,21 @@ export function shapesToERGraph(editor: Editor): ERGraph {
       uniques: [],
       indexes: [],
       _tlShapeId: s.id,
+      isJoinTable: looksLikeJoin, // ✅ preserva el valor real o calculado
     });
+
     tlToEntityId.set(s.id, entityId);
   }
 
   // 4) Relaciones
   const relations: Relation[] = [];
 
+  function isMany(card: Cardinality): boolean {
+    return card.includes('*');
+  }
+
+  // 🔽 Bucle que procesa las relaciones
   for (const s of relationShapes) {
-    // aEntityId / bEntityId podrían venir como string "plano"; castear de forma segura a TLShapeId si es string
     const aTlId: TLShapeId | null =
       (typeof s.props.aEntityId === 'string' ? (s.props.aEntityId as TLShapeId) : s.props.aEntityId) ?? null;
     const bTlId: TLShapeId | null =
@@ -255,24 +279,27 @@ export function shapesToERGraph(editor: Editor): ERGraph {
     const aEntityId: string | undefined = aTlId ? tlToEntityId.get(aTlId) : undefined;
     const bEntityId: string | undefined = bTlId ? tlToEntityId.get(bTlId) : undefined;
 
-    // Ignorar relaciones no conectadas a dos entidades
     if (!aEntityId || !bEntityId) continue;
 
     const aCard: Cardinality = cardinalityOrDefault(s.props.aCard);
     const bCard: Cardinality = cardinalityOrDefault(s.props.bCard);
 
     const relName: string =
-      (typeof s.props.name === 'string' && s.props.name.trim().length > 0
+      typeof s.props.name === 'string' && s.props.name.trim().length > 0
         ? s.props.name.trim()
-        : `rel_${String(s.id).slice(0, 5)}`);
+        : `rel_${String(s.id).slice(0, 5)}`;
+
+    // Normalizar dirección (A = lado 1, B = lado muchos)
+    let aEnd = { entityId: aEntityId, cardinality: aCard };
+    let bEnd = { entityId: bEntityId, cardinality: bCard };
+    if (isMany(aCard) && !isMany(bCard)) {
+      [aEnd, bEnd] = [bEnd, aEnd];
+    }
 
     relations.push({
       id: crypto.randomUUID(),
       name: relName,
-      ends: [
-        { entityId: aEntityId, cardinality: aCard },
-        { entityId: bEntityId, cardinality: bCard },
-      ],
+      ends: [aEnd, bEnd],
       attributes: [],
       _aTlId: aTlId,
       _bTlId: bTlId,
