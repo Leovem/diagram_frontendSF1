@@ -236,11 +236,11 @@ export function shapesToERGraph(editor: Editor): ERGraph {
     // === ⚡️ Detección confiable de tablas intermedias ===
     const pkCount = finalAttrs.filter(a => a.isPrimary).length;
 
-    // 1️⃣ Leer el valor original del shape (desde convertToShapes)
+    // 1️ Leer el valor original del shape (desde convertToShapes)
     const isJoinFromShape =
       (s.props as any)?.isJoinTable === true;
 
-    // 2️⃣ Si no viene del shape, usar heurística
+    // 2️ Si no viene del shape, usar heurística
     const looksLikeJoin =
       isJoinFromShape ||
       /^detalle_|^rel_|^asoc_/i.test(name) ||               // nombres tipo Detalle_, Rel_, Asoc_
@@ -269,7 +269,7 @@ export function shapesToERGraph(editor: Editor): ERGraph {
     return card.includes('*');
   }
 
-  // 🔽 Bucle que procesa las relaciones
+  // Bucle que procesa las relaciones
   for (const s of relationShapes) {
     const aTlId: TLShapeId | null =
       (typeof s.props.aEntityId === 'string' ? (s.props.aEntityId as TLShapeId) : s.props.aEntityId) ?? null;

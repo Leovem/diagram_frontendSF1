@@ -8,7 +8,7 @@ import { saveAs } from 'file-saver';
 import { socket } from './socketService';
 import { generateFlutterProject } from '../services/authService';
 
-// Shapes personalizados - IMPORTA LOS UTILS, NO LOS SHAPES
+// Shapes personalizados 
 import { EntityTableShapeUtil } from './shapes/EntityTableShape';
 import { RelationEdgeShapeUtil } from './shapes/RelationEdgeShape';
 
@@ -18,15 +18,15 @@ import ERInspector from './ui/ERInspector';
 import ERDeleteHotkeys from './ui/ERDeleteHotkeys'
 
 
-// Parser ER
+// parser ER
 import { shapesToERGraph } from './erParser';
 
-// Generador (SQL + Spring ZIP como Blob)
+// Generador SQL + Spring ZIP
 import { generateAll } from '../Diagram/generatorback';
 
 
 /* =========================
-   Botón para generar backend
+   para gevnerar backend
 ========================= */
 function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
   const editor = useEditor();
@@ -38,12 +38,12 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
       setLoading(true);
       const erGraph = shapesToERGraph(editor);
 
-      // difunde snapshot ER opcionalmente
+      // snapshot ER opcionalmente
       socket.emit('graphGenerated', { roomName, graph: erGraph });
 
       const { sql, zipBlob } = await generateAll(erGraph, {
-        packageBase: 'com.misa.case',
-        projectName: 'er-backend',
+        packageBase: 'diagram.backend',
+        projectName: 'backend',
       });
 
       setSql(sql);

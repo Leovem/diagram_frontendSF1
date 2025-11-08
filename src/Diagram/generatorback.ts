@@ -1,7 +1,4 @@
-// ===============================================
-// src/Diagram/BackendGenerator.ts
-// Versión 2.1 – Fix refEntityId perdido + FK duplicadas
-// ===============================================
+
 
 import type { ERGraph } from '../ER_diagram/erParser'
 import { generateSpringProject } from './transforms/to-spring'
@@ -96,7 +93,7 @@ export function toPostgres(graph: ERGraphLocal): string {
 
   for (const e of entities) dependencies.set(e.name, new Set())
 
-  // 🔁 Procesar relaciones
+  //  Procesar relaciones
   for (const rel of graph.relations) {
     let [aEnd, bEnd] = rel.ends
 
@@ -151,7 +148,7 @@ export function toPostgres(graph: ERGraphLocal): string {
 
     if (manyEnt.isJoinTable) continue
 
-    // ✅ Detección robusta de campos existentes
+    //  Detección de campos existentes
     const fkName = `${oneEnt.name}_${onePK.name}`
     const alreadyExists = manyEnt.attributes.some(a =>
       a.name === fkName ||
@@ -160,7 +157,7 @@ export function toPostgres(graph: ERGraphLocal): string {
       a.name.toLowerCase() === `${oneEnt.name.toLowerCase().slice(0, -1)}_id`
     )
 
-    // ✅ Si existe, asigna refEntityId
+    // Si existe, asigna refEntityId
     if (alreadyExists) {
       const existingAttr = manyEnt.attributes.find(a =>
         a.name === fkName ||
@@ -266,8 +263,8 @@ export interface SpringGenOptions {
 export async function generateAll(graph: ERGraph, opts?: SpringGenOptions) {
   const sql = toPostgres(graph as any)
   const zipBlob = await generateSpringProject(graph, {
-    packageBase: opts?.packageBase ?? 'com.example.generated',
-    projectName: opts?.projectName ?? 'er-backend',
+    packageBase: opts?.packageBase ?? 'diagram.backend',
+    projectName: opts?.projectName ?? 'backend',
   })
   return { sql, zipBlob }
 }
