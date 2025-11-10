@@ -83,33 +83,55 @@ function GenerateBackendPanel({ roomName, setSql, setZipBlob }) {
   }
 
   function generatePayload(erGraph) {
-    const classes = erGraph.entities.map((entity) => {
-      return {
-        id: entity.id,
-        name: entity.name,
-        attributes: entity.attributes.map((attr) => ({
+    const joinTables = erGraph.entities.filter(e => e.isJoinTable);
+    const joinTableIds = new Set(joinTables.map(e => e.id));
+
+    const classes = erGraph.entities
+      .filter(e => !joinTableIds.has(e.id))
+      .map(e => ({
+        id: e.id,
+        name: e.name,
+        attributes: e.attributes.map(attr => ({
           name: attr.name,
           type: mapTypeToBackend(attr.type),
         })),
-      };
-    });
+      }));
 
-    const relationships = erGraph.relations.map((relation) => {
-      const endA = relation.ends[0];
-      const endB = relation.ends[1];
+    const relationships = [];
 
-      return {
-        id: relation.id,
+    erGraph.relations.forEach(rel => {
+      const endA = rel.ends[0];
+      const endB = rel.ends[1];
+
+      if (joinTableIds.has(endA.entityId) || joinTableIds.has(endB.entityId)) return;
+
+      relationships.push({
+        id: rel.id,
         sourceId: endA.entityId,
         targetId: endB.entityId,
         type: determineRelationshipType(endA.cardinality, endB.cardinality),
-      };
+      });
     });
 
-    return {
-      classes,
-      relationships
-    };
+    joinTables.forEach(joinEntity => {
+      const connectedRels = erGraph.relations.filter(r =>
+        r.ends.some(e => e.entityId === joinEntity.id)
+      );
+
+      if (connectedRels.length === 2) {
+        const classA = connectedRels[0].ends.find(e => e.entityId !== joinEntity.id).entityId;
+        const classB = connectedRels[1].ends.find(e => e.entityId !== joinEntity.id).entityId;
+
+        relationships.push({
+          id: connectedRels[0].id,
+          sourceId: classA,
+          targetId: classB,
+          type: "many_to_many",
+        });
+      }
+    });
+
+    return { classes, relationships };
   }
 
   function determineRelationshipType(cardA, cardB) {
