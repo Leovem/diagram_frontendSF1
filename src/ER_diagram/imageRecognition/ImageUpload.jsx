@@ -14,11 +14,11 @@ export default function ImageUpload() {
     setLog("🔍 Analizando imagen con Gemini Vision...")
 
     try {
-      // ✅ Usar el prompt por defecto del hook (mejorado)
+      //  Usar el prompt por defecto del hook (mejorado)
       // Si necesitas personalizar, pasa un segundo parámetro
       const responseText = await analyzeImage(file)
 
-      // 🧠 Log de respuesta original
+      //  Log de respuesta original
       console.log("🧠 Respuesta de Gemini Vision:", responseText)
       setLog("📥 Respuesta recibida de la IA")
 
@@ -29,7 +29,7 @@ export default function ImageUpload() {
         .replace(/[^}]+$/, "") // eliminar texto después del último '}'
         .trim()
 
-      // 📦 Parsear JSON
+      //  Parsear JSON
       let data
       try {
         data = JSON.parse(cleanResponse)
@@ -39,13 +39,13 @@ export default function ImageUpload() {
         throw new Error("Respuesta inválida de la IA. Por favor, intenta con otra imagen.")
       }
 
-      // ✅ Validar estructura del JSON
+      //  Validar estructura del JSON
       setLog("🔍 Validando estructura del JSON...")
       const validation = validateAIJson(data)
       
       if (!validation.valid) {
         console.warn("⚠️ Errores de validación:", validation.errors)
-        setLog("⚠️ Advertencias detectadas:\n" + validation.errors.join("\n") + "\n\n🔧 Intentando corregir automáticamente...")
+        setLog(" Advertencias detectadas:\n" + validation.errors.join("\n") + "\n\n Intentando corregir automáticamente...")
         
         // Intentar corrección automática
         data = fixAIJsonIssues(data)
@@ -57,14 +57,14 @@ export default function ImageUpload() {
           throw new Error("El JSON tiene errores que no se pueden corregir automáticamente")
         }
         
-        setLog((l) => l + "\n✅ Correcciones aplicadas exitosamente")
+        setLog((l) => l + "\n Correcciones aplicadas exitosamente")
       } else {
-        setLog("✅ JSON válido recibido")
+        setLog(" JSON válido recibido")
       }
 
-      // 📊 Mostrar resumen de datos detectados
+      //  Mostrar resumen de datos detectados
       const summary = `
-📊 Resumen del modelo:
+ Resumen del modelo:
 • ${data.entities?.length || 0} entidades detectadas
 • ${data.relations?.length || 0} relaciones detectadas
 ${data.entities?.filter(e => e.isJoinTable).length > 0 ? `• ${data.entities.filter(e => e.isJoinTable).length} tablas intermedias` : ''}
@@ -80,8 +80,8 @@ ${data.entities?.map(e => {
       setLog((l) => l + "\n\n" + summary)
       console.log("📊 Datos procesados:", data)
 
-      // 🎨 Convertir a shapes de Tldraw
-      setLog((l) => l + "\n\n🎨 Generando diagrama...")
+      //  Convertir a shapes de Tldraw
+      setLog((l) => l + "\n\n Generando diagrama...")
       convertToShapes(data, editor)
       
       setLog((l) => l + "\n✨ Diagrama insertado correctamente en el canvas")

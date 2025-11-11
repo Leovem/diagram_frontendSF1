@@ -255,37 +255,77 @@ if (isJoinTable && pkAttrs.length === 2) {
     .split(/[_-]/)
     .filter(Boolean)
 
+  if (parts.length !== 2) {
+    console.error(`❌ No se pueden extraer 2 entidades de: ${e.name}`)
+    return [] // O manejar como entidad normal
+  }
+
   let [left, right] = parts
+  
   const normalize = (s: string | undefined | null) =>
-  (s ?? '').toLowerCase().replace(/_/g, '').replace(/s$/, '').trim()
+    (s ?? '')
+      .toLowerCase()
+      .replace(/^(tbl|ent|entity)_?/i, '') // Remueve prefijos comunes
+      .replace(/_/g, '')
+      .replace(/s$/, '')
+      .trim()
 
-const leftEntity = graph.entities.find(x =>
-  normalize(x.name) === normalize(left) ||
-  normalize(x.name).includes(normalize(left)) ||
-  normalize(left).includes(normalize(x.name))
-)
+  let leftEntity = graph.entities.find(x =>
+    normalize(x.name) === normalize(left) ||
+    normalize(x.name).includes(normalize(left)) ||
+    normalize(left).includes(normalize(x.name))
+  )
 
-const rightEntity = graph.entities.find(x =>
-  normalize(x.name) === normalize(right) ||
-  normalize(x.name).includes(normalize(right)) ||
-  normalize(right).includes(normalize(x.name))
-)
-
+  let rightEntity = graph.entities.find(x =>
+    normalize(x.name) === normalize(right) ||
+    normalize(x.name).includes(normalize(right)) ||
+    normalize(right).includes(normalize(x.name))
+  )
 
   console.log("🔗 Resolviendo join table:", e.name)
+  console.log("  📊 Entidades disponibles:", graph.entities.map(x => x.name))
   console.log("  → left:", left, "→ found:", leftEntity?.name)
   console.log("  → right:", right, "→ found:", rightEntity?.name)
 
-  const hasExtraAttrs = e.attributes.length > pkAttrs.length
-  if (!hasExtraAttrs) {
-    console.warn(`⚠️ ${e.name} detectada como relación pura N:N, sin atributos adicionales`)
-    return [{
-      filename: `${cls}.java`,
-      content: `// Tabla ${e.name} detectada como relación muchos a muchos pura (sin atributos adicionales).
-// No se genera entidad intermedia explícita.
-`
-    }]
+  // ⚠️ VALIDACIÓN CRÍTICA
+  if (!leftEntity || !rightEntity) {
+    console.error(`❌ No se encontraron ambas entidades para ${e.name}`)
+    console.error(`   leftEntity: ${leftEntity?.name ?? 'NOT FOUND'}`)
+    console.error(`   rightEntity: ${rightEntity?.name ?? 'NOT FOUND'}`)
+    return [] // O manejar como error
   }
+
+  // ✅ VALIDAR ORDEN CORRECTO basándose en los nombres de los FKs
+  const leftFkName = normalize(pkAttrs[0].name)
+  const rightFkName = normalize(pkAttrs[1].name)
+  const leftEntityNorm = normalize(leftEntity.name)
+  const rightEntityNorm = normalize(rightEntity.name)
+
+  // Si el primer FK no coincide con la primera entidad, intercambiar
+  const leftMatches = leftFkName.includes(leftEntityNorm) || 
+                      leftEntityNorm.includes(leftFkName.replace(/id$/, ''))
+  
+  if (!leftMatches) {
+    console.log("  🔄 Intercambiando entidades para coincidir con FKs")
+    ;[leftEntity, rightEntity] = [rightEntity, leftEntity]
+  }
+
+  // Verificar que ahora sí coincidan
+  const finalLeftFk = normalize(pkAttrs[0].name)
+  const finalLeftEntity = normalize(leftEntity.name)
+  if (!finalLeftFk.includes(finalLeftEntity) && 
+      !finalLeftEntity.includes(finalLeftFk.replace(/id$/, ''))) {
+    console.warn(`⚠️ Posible desajuste: FK "${pkAttrs[0].name}" vs Entidad "${leftEntity.name}"`)
+  }
+
+  // === Detección de relación intermedia (join table) ===
+const hasExtraAttrs = e.attributes.length > pkAttrs.length
+
+if (!hasExtraAttrs) {
+  console.warn(`ℹ️ ${e.name} detectada como relación N:N pura, se generará entidad intermedia igualmente.`)
+  // ⚙️ Continuar normalmente (NO retornar)
+}
+
 
   // === Archivo 1: clase ID embebible ===
   const idFields = pkAttrs.map(a => {
@@ -320,26 +360,35 @@ ${idFields}
   entityFields.push(`${INDENT}@EmbeddedId\n${INDENT}private ${idCls} id;`)
 
   if (leftEntity) {
-    entityFields.push(
+  // Extraer nombre limpio sin prefijos como "id_", "fk_", etc.
+  const leftFieldName = camel(leftEntity.name)
+  
+  entityFields.push(
 `${INDENT}@ManyToOne
 ${INDENT}@MapsId("${camel(pkAttrs[0].name)}")
 ${INDENT}@JoinColumn(name = "${pkAttrs[0].name.toLowerCase()}", nullable = false)
-${INDENT}private ${pascal(leftEntity.name)} ${camel(leftEntity.name)};`
-    )
-  } else {
-    console.warn(`⚠️ No se encontró entidad izquierda para ${e.name}`)
-  }
+${INDENT}private ${pascal(leftEntity.name)} ${leftFieldName};`
+  )
+  
+  console.log(`  ✓ Campo izquierdo: ${leftFieldName} : ${pascal(leftEntity.name)}`)
+} else {
+  console.warn(`⚠️ No se encontró entidad izquierda para ${e.name}`)
+}
 
-  if (rightEntity) {
-    entityFields.push(
+if (rightEntity) {
+  const rightFieldName = camel(rightEntity.name)
+  
+  entityFields.push(
 `${INDENT}@ManyToOne
 ${INDENT}@MapsId("${camel(pkAttrs[1].name)}")
 ${INDENT}@JoinColumn(name = "${pkAttrs[1].name.toLowerCase()}", nullable = false)
-${INDENT}private ${pascal(rightEntity.name)} ${camel(rightEntity.name)};`
-    )
-  } else {
-    console.warn(`⚠️ No se encontró entidad derecha para ${e.name}`)
-  }
+${INDENT}private ${pascal(rightEntity.name)} ${rightFieldName};`
+  )
+  
+  console.log(`  ✓ Campo derecho: ${rightFieldName} : ${pascal(rightEntity.name)}`)
+} else {
+  console.warn(`⚠️ No se encontró entidad derecha para ${e.name}`)
+}
 
   // Atributos adicionales
   for (const a of e.attributes) {
