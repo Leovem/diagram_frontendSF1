@@ -4,6 +4,8 @@ import { Tldraw, useEditor } from 'tldraw';
 import 'tldraw/tldraw.css';
 import { useParams } from 'react-router-dom';
 import { saveAs } from 'file-saver';
+import { setEditor } from "./chatAI/editorStore"
+
 
 import { socket } from './socketService';
 import { generateFlutterProject } from '../services/authService';
@@ -23,6 +25,15 @@ import { shapesToERGraph } from './erParser';
 
 // Generador SQL + Spring ZIP
 import { generateAll } from '../Diagram/generatorback';
+
+function RegisterEditor() {
+  const editor = useEditor()
+  React.useEffect(() => {
+    setEditor(editor)
+  }, [editor])
+  return null
+}
+
 
 
 /* =========================
@@ -403,6 +414,7 @@ export default function MyEditor() {
           }}
         >
           {/* Tu UI personalizada se mantiene */}
+          <RegisterEditor />
           <TldrawSync roomName={roomName} />
           <ERPalette />
           <ERInspector />

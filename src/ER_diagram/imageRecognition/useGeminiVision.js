@@ -187,12 +187,12 @@ Si no estás seguro, usa "association".
 
 Antes de devolver el JSON, verifica:
 
-1. ✅ Cada entidad tiene exactamente un campo en "primaryKeys" (excepto tablas intermedias)
-2. ✅ Las tablas intermedias tienen 2+ campos en "primaryKeys"
-3. ✅ Todos los nombres usan snake_case (ej: "student_id", no "studentId")
-4. ✅ Las relaciones usan nombres de entidades exactos (case-sensitive)
-5. ✅ Las cardinalidades son una de: "1", "0..1", "1..*", "0..*"
-6. ✅ El JSON es válido (sin comas finales, comillas correctas)
+1.  Cada entidad tiene exactamente un campo en "primaryKeys" (excepto tablas intermedias)
+2.  Las tablas intermedias tienen 2+ campos en "primaryKeys"
+3.  Todos los nombres usan snake_case (ej: "student_id", no "studentId")
+4. Las relaciones usan nombres de entidades exactos (case-sensitive)
+5.  Las cardinalidades son una de: "1", "0..1", "1..*", "0..*"
+6.  El JSON es válido (sin comas finales, comillas correctas)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -213,8 +213,8 @@ Antes de devolver el JSON, verifica:
       // Validar que sea JSON válido
       try {
         const parsed = JSON.parse(text);
-        console.log("✅ JSON válido recibido de Gemini");
-        console.log("📊 Respuesta completa de la IA:", parsed);
+        console.log(" JSON válido recibido de Gemini");
+        console.log(" Respuesta completa de la IA:", parsed);
         return text;
       } catch (parseError) {
         console.error("❌ JSON inválido de Gemini:", text);
