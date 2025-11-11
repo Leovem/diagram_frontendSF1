@@ -76,15 +76,30 @@ function isOptional(card: Cardinality): boolean {
 }
 
 // =======================
-// Generador SQL
+// Generador SQL robusto
 // =======================
 export function toPostgres(graph: ERGraphLocal): string {
-  console.log('📦 JSON recibido para generación:')
+  console.log("====================================")
+  console.log("🧠 INICIO DE GENERACIÓN SQL (toPostgres)")
+  console.log("====================================")
+  console.log("📦 ERGraph recibido:")
   console.log(JSON.stringify(graph, null, 2))
 
+  // === Normalización completa de entidades ===
   const entities: Entity[] = graph.entities.map(e => ({
-    ...e,
-    attributes: e.attributes.map(a => ({ ...a })),
+    id: e.id,
+    name: e.name.trim(),
+    isJoinTable: e.isJoinTable ?? false, // ✅ conservar flag joinTable
+    attributes: (e.attributes || []).map(a => ({
+      id: a.id,
+      name: a.name.trim(),
+      type: a.type || "string",
+      isPrimary: !!a.isPrimary,
+      isUnique: !!a.isUnique,
+      isNullable: a.isNullable ?? true,
+      defaultValue: a.defaultValue ?? null,
+      refEntityId: a.refEntityId ?? undefined,
+    })),
   }))
 
   const entityById = new Map(entities.map(e => [e.id, e]))
@@ -93,17 +108,30 @@ export function toPostgres(graph: ERGraphLocal): string {
 
   for (const e of entities) dependencies.set(e.name, new Set())
 
-  //  Procesar relaciones
+  // === Procesamiento de relaciones ===
+  console.log("\n🔗 Procesando relaciones...")
   for (const rel of graph.relations) {
     let [aEnd, bEnd] = rel.ends
 
+    if (!aEnd || !bEnd) {
+      console.warn(`⚠️ Relación inválida sin extremos definidos: ${rel.name}`)
+      continue
+    }
+
+    // Forzar consistencia: el lado MANY siempre debe ser bEnd
     if (isMany(aEnd.cardinality) && !isMany(bEnd.cardinality)) {
       [aEnd, bEnd] = [bEnd, aEnd]
     }
 
     const aEnt = entityById.get(aEnd.entityId)
     const bEnt = entityById.get(bEnd.entityId)
-    if (!aEnt || !bEnt) continue
+    if (!aEnt || !bEnt) {
+      console.warn(`⚠️ Relación "${rel.name}" ignora entidades faltantes:`, {
+        a: aEnd.entityId,
+        b: bEnd.entityId,
+      })
+      continue
+    }
 
     const aPK = findPkAttr(aEnt)
     const bPK = findPkAttr(bEnt)
@@ -116,18 +144,20 @@ export function toPostgres(graph: ERGraphLocal): string {
       const bCol = `${bEnt.name}_${bPK.name}`
       const relAttrs = rel.attributes ?? []
 
+      console.log(`🧩 Relación N:N detectada: ${aEnt.name} ⇄ ${bEnt.name} → ${tableName}`)
+
       const cols: string[] = [
         `  "${aCol}" ${pgType(aPK.type)} NOT NULL`,
         `  "${bCol}" ${pgType(bPK.type)} NOT NULL`,
       ]
 
       for (const attr of relAttrs) {
-        const nullable = attr.isNullable ? '' : ' NOT NULL'
-        const unique = attr.isUnique ? ' UNIQUE' : ''
+        const nullable = attr.isNullable ? "" : " NOT NULL"
+        const unique = attr.isUnique ? " UNIQUE" : ""
         const def =
           attr.defaultValue !== undefined && attr.defaultValue !== null
-            ? ` DEFAULT ${typeof attr.defaultValue === 'string' ? `'${attr.defaultValue}'` : attr.defaultValue}`
-            : ''
+            ? ` DEFAULT ${typeof attr.defaultValue === "string" ? `'${attr.defaultValue}'` : attr.defaultValue}`
+            : ""
         cols.push(`  "${attr.name}" ${pgType(attr.type)}${nullable}${unique}${def}`)
       }
 
@@ -135,7 +165,7 @@ export function toPostgres(graph: ERGraphLocal): string {
       cols.push(`  FOREIGN KEY ("${aCol}") REFERENCES "${aEnt.name}"("${aPK.name}") ON DELETE CASCADE`)
       cols.push(`  FOREIGN KEY ("${bCol}") REFERENCES "${bEnt.name}"("${bPK.name}") ON DELETE CASCADE`)
 
-      tables.push(`CREATE TABLE "${tableName}" (\n${cols.join(',\n')}\n);`)
+      tables.push(`CREATE TABLE "${tableName}" (\n${cols.join(",\n")}\n);`)
       continue
     }
 
@@ -180,7 +210,7 @@ export function toPostgres(graph: ERGraphLocal): string {
     }
   }
 
-  // === Resolver orden topológico ===
+  // === Resolver orden de dependencias (topológico) ===
   const sorted: Entity[] = []
   const visited = new Set<string>()
 
@@ -194,43 +224,46 @@ export function toPostgres(graph: ERGraphLocal): string {
 
   for (const e of entities) visit(e.name)
 
-  // === Generar SQL de entidades ===
-  for (const e of sorted) {
-    console.log(`🔍 ${e.name} → isJoinTable =`, e.isJoinTable)
+  console.log("\n📊 Orden de creación de tablas:", sorted.map(e => e.name).join(" → "))
 
-    const cols = e.attributes.map(a => {
-      const nullable = a.isNullable ? '' : ' NOT NULL'
-      const unique = a.isUnique ? ' UNIQUE' : ''
+  // === Generar SQL final ===
+  for (const e of sorted) {
+    console.log(`\n🔍 ${e.name} → isJoinTable =`, e.isJoinTable)
+
+    const cols: string[] = []
+    for (const a of e.attributes) {
+      const nullable = a.isNullable ? "" : " NOT NULL"
+      const unique = a.isUnique ? " UNIQUE" : ""
       const def =
         a.defaultValue !== undefined && a.defaultValue !== null
-          ? ` DEFAULT ${typeof a.defaultValue === 'string' ? `'${a.defaultValue}'` : a.defaultValue}`
-          : ''
-      return `  "${a.name}" ${pgType(a.type)}${nullable}${unique}${def}`
-    })
+          ? ` DEFAULT ${typeof a.defaultValue === "string" ? `'${a.defaultValue}'` : a.defaultValue}`
+          : ""
+      cols.push(`  "${a.name}" ${pgType(a.type)}${nullable}${unique}${def}`)
+    }
 
     const pkCols = e.attributes.filter(a => a.isPrimary).map(a => `"${a.name}"`)
-    if (pkCols.length) cols.push(`  PRIMARY KEY (${pkCols.join(', ')})`)
+    if (pkCols.length) cols.push(`  PRIMARY KEY (${pkCols.join(", ")})`)
 
     if (e.isJoinTable) {
       for (const attr of e.attributes.filter(a =>
-        a.name.toLowerCase().includes('_id') || a.name.toLowerCase().startsWith('id_')
+        a.name.toLowerCase().includes("_id") || a.name.toLowerCase().startsWith("id_")
       )) {
         const base = attr.name
           .toLowerCase()
-          .replace(/^id_/, '')
-          .replace(/_id$/, '')
+          .replace(/^id_/, "")
+          .replace(/_id$/, "")
           .trim()
 
         const refEnt =
           entities.find(x => x.name.toLowerCase() === base) ||
-          entities.find(x => x.name.toLowerCase() === base + 's') ||
+          entities.find(x => x.name.toLowerCase() === base + "s") ||
           entities.find(x => x.name.toLowerCase() === base.slice(0, -1))
 
         if (refEnt) {
           const refPk = findPkAttr(refEnt)
-          cols.push(
-            `  FOREIGN KEY ("${attr.name}") REFERENCES "${refEnt.name}"("${refPk.name}") ON DELETE CASCADE`
-          )
+          cols.push(`  FOREIGN KEY ("${attr.name}") REFERENCES "${refEnt.name}"("${refPk.name}") ON DELETE CASCADE`)
+        } else {
+          console.warn(`⚠️ FK no resuelta en joinTable "${e.name}" → ${attr.name}`)
         }
       }
     } else {
@@ -239,18 +272,20 @@ export function toPostgres(graph: ERGraphLocal): string {
         const refEnt = fk.refEntityId ? entities.find(x => x.id === fk.refEntityId) : undefined
         const refPk = refEnt ? findPkAttr(refEnt) : null
         if (refEnt && refPk) {
-          cols.push(
-            `  FOREIGN KEY ("${fk.name}") REFERENCES "${refEnt.name}"("${refPk.name}") ON DELETE CASCADE`
-          )
+          cols.push(`  FOREIGN KEY ("${fk.name}") REFERENCES "${refEnt.name}"("${refPk.name}") ON DELETE CASCADE`)
+        } else {
+          console.warn(`⚠️ FK sin entidad de referencia: ${fk.name} en ${e.name}`)
         }
       }
     }
 
-    tables.push(`CREATE TABLE "${e.name}" (\n${cols.join(',\n')}\n);`)
+    tables.push(`CREATE TABLE "${e.name}" (\n${cols.join(",\n")}\n);`)
   }
 
-  return tables.join('\n\n')
+  console.log("\n✅ Generación SQL completada.\n")
+  return tables.join("\n\n")
 }
+
 
 // =======================
 // Spring Boot Generator

@@ -7,6 +7,7 @@ import { createShapeId } from "tldraw"
  * @param {object} data - JSON de IA (entities + relations)
  * @param {object} editor - instancia del editor Tldraw
  */
+
 export function convertToShapes(data, editor) {
   if (!data || !editor) return
 
@@ -22,76 +23,67 @@ export function convertToShapes(data, editor) {
     const row = Math.floor(i / cols)
     const col = i % cols
 
-    // ✅ Normalizar primaryKeys a minúsculas y trim
-    const primaryKeys = (entity.primaryKeys || []).map((pk) => 
+    // ✅ Normalizar primaryKeys
+    const primaryKeys = (entity.primaryKeys || []).map((pk) =>
       pk.toLowerCase().trim().replace(/\s+/g, "_")
     )
 
+    // === Atributos ===
     const attrs = (entity.attributes || []).map((attr) => {
-      const name = typeof attr === 'string' 
-        ? attr.toLowerCase().trim().replace(/\s+/g, "_")
-        : attr.name?.toLowerCase().trim().replace(/\s+/g, "_") || "unknown"
-      
-      // ✅ CORRECCIÓN: Solo marcar como PK si está en primaryKeys
-      // NO asumir que todo lo que termina en _id es PK (puede ser FK)
+      const name =
+        typeof attr === "string"
+          ? attr.toLowerCase().trim().replace(/\s+/g, "_")
+          : attr.name?.toLowerCase().trim().replace(/\s+/g, "_") || "unknown"
+
       const isPK = primaryKeys.includes(name)
-      
-      // ✅ Inferir tipo de dato basado en el nombre del atributo
-      let type = "string"
-      
-      if (name.endsWith("_id") || name === "id") {
+
+      // 🧠 Mantener tipo del JSON original (si existe)
+      let type =
+        typeof attr === "object" && attr.type
+          ? attr.type.toLowerCase().trim()
+          : "string"
+
+      // ⚙️ Forzar "uuid" solo para claves primarias o campos *_id
+      if (name === "id" || name.endsWith("_id") || isPK) {
         type = "uuid"
-      } else if (name.includes("date") || name.includes("fecha") || name.includes("timestamp")) {
-        type = "date"
-      } else if (name.includes("time") || name.includes("hora")) {
-        type = "time"
-      } else if (
-        name.includes("price") || name.includes("precio") || 
-        name.includes("amount") || name.includes("monto") ||
-        name.includes("total") || name.includes("cost") || name.includes("costo")
-      ) {
-        type = "decimal"
-      } else if (
-        name.includes("quantity") || name.includes("cantidad") || 
-        name.includes("count") || name.includes("numero") ||
-        name.includes("age") || name.includes("edad") ||
-        name === "mark" || name === "nota" || name === "score" ||
-        name.includes("year") || name.includes("año")
-      ) {
-        type = "integer"
-      } else if (
-        name.includes("active") || name.includes("activo") ||
-        name.includes("enabled") || name.includes("habilitado") ||
-        name.includes("is_") || name.includes("has_")
-      ) {
-        type = "boolean"
-      } else if (name.includes("email") || name.includes("correo")) {
-        type = "string"
-      } else if (
-        name.includes("description") || name.includes("descripcion") ||
-        name.includes("content") || name.includes("contenido") ||
-        name.includes("text") || name.includes("texto") ||
-        name.includes("comment") || name.includes("comentario")
-      ) {
-        type = "text"
       }
-      
+
+      // ⚙️ Si la IA devuelve tipos como "date", "boolean", "decimal", etc., forzamos a "string"
+      const nonStringTypes = [
+        "date",
+        "localdate",
+        "datetime",
+        "decimal",
+        "float",
+        "boolean",
+        "integer",
+        "long",
+        "double",
+        "text",
+      ]
+      if (nonStringTypes.includes(type)) {
+        type = "string"
+      }
+
       return {
         id: createShapeId(),
         name,
         type,
         pk: isPK,
         unique: false,
-        nullable: !isPK, // ✅ Las PKs no son nullable
+        nullable: !isPK,
       }
     })
 
-    // ✅ Detectar tabla intermedia correctamente
-    const isJoinTable = entity.isJoinTable === true || (
-      primaryKeys.length > 1 && 
-      primaryKeys.every(pk => attrs.some(a => a.name === pk && a.name.endsWith("_id")))
-    )
+    // ✅ Detectar tabla intermedia (join table)
+    const isJoinTable =
+      entity.isJoinTable === true ||
+      (primaryKeys.length > 1 &&
+        primaryKeys.every((pk) =>
+          attrs.some((a) => a.name === pk && a.name.endsWith("_id"))
+        ))
 
+    // === Crear shape de la entidad ===
     const shape = {
       id: createShapeId(),
       type: "entity-table",
@@ -120,25 +112,18 @@ export function convertToShapes(data, editor) {
         return
       }
 
-      // ✅ CORRECCIÓN CRÍTICA: Normalizar dirección de relaciones
-      // En una relación 1:*, el lado "1" debe ser "b" y el lado "*" debe ser "a"
-      // Esto es porque las FK van en el lado "many" apuntando al lado "one"
-      
       let aEntityId = fromId
       let bEntityId = toId
       let aCard = rel.aCard || "1"
       let bCard = rel.bCard || "1..*"
-      
-      // Detectar si es "many"
-      const aIsMany = aCard.includes('*') || aCard.toLowerCase().includes('n') || aCard.toLowerCase().includes('m')
-      const bIsMany = bCard.includes('*') || bCard.toLowerCase().includes('n') || bCard.toLowerCase().includes('m')
-      
-      // ✅ Invertir si el lado "from" es "many" y el "to" es "1"
-      // Queremos que "a" sea el lado "many" y "b" sea el lado "1"
+
+      // 🧭 Mantener coherencia direccional (many → one)
+      const aIsMany = aCard.includes("*") || /[nm]/i.test(aCard)
+      const bIsMany = bCard.includes("*") || /[nm]/i.test(bCard)
+
       if (!aIsMany && bIsMany) {
-        // Caso: from=1, to=many → Invertir para que a=many, b=1
-        [aEntityId, bEntityId] = [bEntityId, aEntityId];
-        [aCard, bCard] = [bCard, aCard]
+        [aEntityId, bEntityId] = [bEntityId, aEntityId]
+        ;[aCard, bCard] = [bCard, aCard]
       }
 
       const relationShape = {
@@ -163,8 +148,11 @@ export function convertToShapes(data, editor) {
     })
   }
 
-  console.log("🧩 Shapes generados por convertToShapes():", JSON.stringify(shapes, null, 2))
-  
+  console.log(
+    "🧩 Shapes generados por convertToShapes():",
+    JSON.stringify(shapes, null, 2)
+  )
+
   // === Insertar shapes en el editor ===
   editor.createShapes(shapes)
 
@@ -180,6 +168,7 @@ export function convertToShapes(data, editor) {
 
   return shapes
 }
+
 
 /**
  * Valida el JSON generado por la IA antes de convertirlo

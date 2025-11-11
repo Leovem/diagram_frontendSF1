@@ -41,6 +41,7 @@ Reglas:
 - Todos los identificadores únicos (por ejemplo, id_libro, id_autor, id_usuario, etc.)
   deben generarse en formato UUID v4, por ejemplo:
   "550e8400-e29b-41d4-a716-446655440000".
+  ⚠️ Todos los tipos de atributos (fecha, número, booleano, etc.) deben ser convertidos a "string".
 `
 
 export function useDiagramAI() {

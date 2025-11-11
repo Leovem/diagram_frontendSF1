@@ -219,10 +219,10 @@ public class BackendApplication {
    Entity.java
 ====================== */
 
-/* ======================
-   Entity.java Generator (2-file version)
-====================== */
 function entityJava(pkg: string, e: Entity, graph: ERGraph) {
+
+  
+
   const cls = pascal(e.name)
   const idCls = `${cls}Id`
   const typeImports = new Set<string>(['jakarta.persistence.*', 'lombok.*'])
@@ -241,39 +241,66 @@ function entityJava(pkg: string, e: Entity, graph: ERGraph) {
   const usesUUID = e.attributes.some(a => javaType(a.type).includes('UUID'))
   if (usesUUID) typeImports.add('java.util.UUID')
 
-  const isJoinTable = /^detalle_/i.test(e.name) || /^relacion_/i.test(e.name)
+  const isJoinTable = e.isJoinTable === true || /^detalle_/i.test(e.name) || /^relacion_/i.test(e.name)
 
-  // === CASO 1: entidad intermedia con PK compuesta (dos archivos)
-  if (isJoinTable && pkAttrs.length === 2) {
-    const parts = e.name.replace(/^detalle_|^relacion_/i, '').split(/[_-]/).filter(p => p)
-    const [left, right] = parts
-    const leftEntity = graph.entities.find(x => x.name.toLowerCase() === left.toLowerCase())
-    const rightEntity = graph.entities.find(x => x.name.toLowerCase() === right.toLowerCase())
 
-    const hasExtraAttrs = e.attributes.length > pkAttrs.length
-    if (!hasExtraAttrs) {
-      return [{
-        filename: `${cls}.java`,
-        content: `// Tabla ${e.name} detectada como relación muchos a muchos pura (sin atributos adicionales).
+
+
+// === CASO 1: entidad intermedia con PK compuesta (dos archivos)
+if (isJoinTable && pkAttrs.length === 2) {
+  console.log("🧩 Generando entidad intermedia:", e.name)
+
+  const parts = e.name
+    .replace(/^detalle_|^relacion_/i, '')
+    .split(/[_-]/)
+    .filter(Boolean)
+
+  let [left, right] = parts
+  const normalize = (s: string | undefined | null) =>
+  (s ?? '').toLowerCase().replace(/_/g, '').replace(/s$/, '').trim()
+
+const leftEntity = graph.entities.find(x =>
+  normalize(x.name) === normalize(left) ||
+  normalize(x.name).includes(normalize(left)) ||
+  normalize(left).includes(normalize(x.name))
+)
+
+const rightEntity = graph.entities.find(x =>
+  normalize(x.name) === normalize(right) ||
+  normalize(x.name).includes(normalize(right)) ||
+  normalize(right).includes(normalize(x.name))
+)
+
+
+  console.log("🔗 Resolviendo join table:", e.name)
+  console.log("  → left:", left, "→ found:", leftEntity?.name)
+  console.log("  → right:", right, "→ found:", rightEntity?.name)
+
+  const hasExtraAttrs = e.attributes.length > pkAttrs.length
+  if (!hasExtraAttrs) {
+    console.warn(`⚠️ ${e.name} detectada como relación pura N:N, sin atributos adicionales`)
+    return [{
+      filename: `${cls}.java`,
+      content: `// Tabla ${e.name} detectada como relación muchos a muchos pura (sin atributos adicionales).
 // No se genera entidad intermedia explícita.
 `
-      }]
-    }
+    }]
+  }
 
-    // === Archivo 1: clase ID embebible ===
-    const idFields = pkAttrs.map(a => {
-      const jt = simpleJavaType(javaType(a.type))
-      return `${INDENT}@Column(name = "${a.name.toLowerCase()}")\n${INDENT}private ${jt} ${camel(a.name)};`
-    }).join('\n\n')
+  // === Archivo 1: clase ID embebible ===
+  const idFields = pkAttrs.map(a => {
+    const jt = simpleJavaType(javaType(a.type))
+    return `${INDENT}@Column(name = "${a.name.toLowerCase()}")\n${INDENT}private ${jt} ${camel(a.name)};`
+  }).join('\n\n')
 
-    const idImports = [
-      'jakarta.persistence.*',
-      'lombok.*',
-      'java.io.Serializable'
-    ]
-    if (usesUUID) idImports.push('java.util.UUID')
+  const idImports = [
+    'jakarta.persistence.*',
+    'lombok.*',
+    'java.io.Serializable'
+  ]
+  if (usesUUID) idImports.push('java.util.UUID')
 
-    const idClassContent = `package ${pkg}.entity;
+  const idClassContent = `package ${pkg}.entity;
 
 ${idImports.map(i => `import ${i};`).join('\n')}
 
@@ -288,40 +315,45 @@ ${idFields}
 }
 `
 
-    // === Archivo 2: entidad principal ===
-    const entityFields: string[] = []
-    entityFields.push(`${INDENT}@EmbeddedId\n${INDENT}private ${idCls} id;`)
+  // === Archivo 2: entidad principal ===
+  const entityFields = []
+  entityFields.push(`${INDENT}@EmbeddedId\n${INDENT}private ${idCls} id;`)
 
-    if (leftEntity) {
-      entityFields.push(
+  if (leftEntity) {
+    entityFields.push(
 `${INDENT}@ManyToOne
 ${INDENT}@MapsId("${camel(pkAttrs[0].name)}")
 ${INDENT}@JoinColumn(name = "${pkAttrs[0].name.toLowerCase()}", nullable = false)
 ${INDENT}private ${pascal(leftEntity.name)} ${camel(leftEntity.name)};`
-      )
-    }
-    if (rightEntity) {
-      entityFields.push(
+    )
+  } else {
+    console.warn(`⚠️ No se encontró entidad izquierda para ${e.name}`)
+  }
+
+  if (rightEntity) {
+    entityFields.push(
 `${INDENT}@ManyToOne
 ${INDENT}@MapsId("${camel(pkAttrs[1].name)}")
 ${INDENT}@JoinColumn(name = "${pkAttrs[1].name.toLowerCase()}", nullable = false)
 ${INDENT}private ${pascal(rightEntity.name)} ${camel(rightEntity.name)};`
-      )
-    }
+    )
+  } else {
+    console.warn(`⚠️ No se encontró entidad derecha para ${e.name}`)
+  }
 
-    // Atributos adicionales
-    for (const a of e.attributes) {
-      if (a.isPrimary) continue
-      const jt = simpleJavaType(javaType(a.type))
-      entityFields.push(`${INDENT}@Column(name = "${a.name.toLowerCase()}")\n${INDENT}private ${jt} ${camel(a.name)};`)
-    }
+  // Atributos adicionales
+  for (const a of e.attributes) {
+    if (a.isPrimary) continue
+    const jt = simpleJavaType(javaType(a.type))
+    entityFields.push(`${INDENT}@Column(name = "${a.name.toLowerCase()}")\n${INDENT}private ${jt} ${camel(a.name)};`)
+  }
 
-    const entityImports = Array.from(typeImports)
-      .sort()
-      .map(i => `import ${i};`)
-      .join('\n')
+  const entityImports = Array.from(typeImports)
+    .sort()
+    .map(i => `import ${i};`)
+    .join('\n')
 
-    const entityContent = `package ${pkg}.entity;
+  const entityContent = `package ${pkg}.entity;
 
 ${entityImports}
 
@@ -332,11 +364,19 @@ ${entityFields.join('\n\n')}
 }
 `
 
-    return [
-      { filename: `${idCls}.java`, content: idClassContent },
-      { filename: `${cls}.java`, content: entityContent }
-    ]
-  }
+  console.log(`✅ Generados archivos para ${e.name}: ${idCls}.java y ${cls}.java`)
+
+  return [
+    { filename: `${idCls}.java`, content: idClassContent },
+    { filename: `${cls}.java`, content: entityContent }
+  ]
+}
+else if (isJoinTable && pkAttrs.length !== 2) {
+  console.warn("⚠️ Tabla marcada como joinTable pero PK count ≠ 2:", e.name, "→", pkAttrs.length)
+} else if (!isJoinTable && pkAttrs.length === 2) {
+  console.log("ℹ️ Tiene 2 PK pero no marcada como joinTable:", e.name)
+}
+
 
   // === CASO 2: entidad normal (una sola clase) ===
   const fields: string[] = []
@@ -657,89 +697,68 @@ public class ${cls}Controller {
 
 
 
-function generatePostmanCollection(er: ERGraph, projectName: string, port = 8080): string {
+export function generatePostmanText(er: ERGraph, port = 8080): string {
   const baseUrl = `http://localhost:${port}/api`
 
-  const items = er.entities.map(entity => {
-    const name = entity.name
-    const endpoint = `${baseUrl}/${name.toLowerCase()}`
+  return er.entities
+    .map(entity => {
+      const name = entity.name.toLowerCase()
+      const url = `${baseUrl}/${name}`
 
-    // generar cuerpo JSON automático con campos de ejemplo
-    const body = Object.fromEntries(
-      entity.attributes
-        .filter(a => !a.isPrimary)
-        .map(a => [a.name, a.type === 'int' || a.type === 'float' ? 0 : a.type === 'bool' ? false : `${a.name}_ejemplo`])
-    )
+      // construir cuerpo JSON de ejemplo basado en tipos
+      const body = Object.fromEntries(
+        entity.attributes
+          .filter(a => !a.isPrimary)
+          .map(a => {
+            const type = a.type?.toLowerCase?.() ?? "string"
+            let value
 
-    return {
-      name,
-      item: [
-        {
-          name: `GET - Listar ${name}`,
-          request: {
-            method: "GET",
-            url: { raw: endpoint, protocol: "http", host: ["localhost"], port: port.toString(), path: ["api", name.toLowerCase()] }
-          }
-        },
-        {
-          name: `POST - Crear ${name}`,
-          request: {
-            method: "POST",
-            header: [{ key: "Content-Type", value: "application/json" }],
-            body: { mode: "raw", raw: JSON.stringify(body, null, 2) },
-            url: { raw: endpoint, protocol: "http", host: ["localhost"], port: port.toString(), path: ["api", name.toLowerCase()] }
-          },
-          event: [{
-            listen: "test",
-            script: {
-              exec: [
-                `let id = pm.response.json().id${name};`,
-                `pm.environment.set("id${name}", id);`,
-                `pm.test("Status 200", function() { pm.response.to.have.status(200); });`
-              ],
-              type: "text/javascript"
-            }
-          }]
-        },
-        {
-          name: `GET - Buscar ${name} por ID`,
-          request: {
-            method: "GET",
-            url: { raw: `${endpoint}/{{id${name}}}`, protocol: "http", host: ["localhost"], port: port.toString(), path: ["api", name.toLowerCase(), `{{id${name}}}`] }
-          }
-        },
-        {
-          name: `PUT - Actualizar ${name}`,
-          request: {
-            method: "PUT",
-            header: [{ key: "Content-Type", value: "application/json" }],
-            body: { mode: "raw", raw: JSON.stringify(body, null, 2) },
-            url: { raw: `${endpoint}/{{id${name}}}`, protocol: "http", host: ["localhost"], port: port.toString(), path: ["api", name.toLowerCase(), `{{id${name}}}`] }
-          }
-        },
-        {
-          name: `DELETE - Eliminar ${name}`,
-          request: {
-            method: "DELETE",
-            url: { raw: `${endpoint}/{{id${name}}}`, protocol: "http", host: ["localhost"], port: port.toString(), path: ["api", name.toLowerCase(), `{{id${name}}}`] }
-          }
-        }
-      ]
-    }
-  })
+            if (["uuid"].includes(type))
+              value = "123e4567-e89b-12d3-a456-426614174000"
+            else if (["int", "integer", "long", "float", "double", "number"].includes(type))
+              value = 1
+            else if (["bool", "boolean"].includes(type))
+              value = true
+            else if (["date", "datetime", "timestamp"].includes(type))
+              value = "2025-11-10"
+            else
+              value = `${a.name} ejemplo`
 
-  const collection = {
-    info: {
-      _postman_id: crypto.randomUUID?.() ?? "12345678-aaaa-bbbb-cccc-123456789000",
-      name: `${projectName} - API Collection`,
-      description: "Colección generada automáticamente para pruebas CRUD de la API Spring Boot",
-      schema: "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-    },
-    item: items
-  }
+            return [a.name, value]
+          })
+      )
 
-  return JSON.stringify(collection, null, 2)
+      const json = JSON.stringify(body, null, 2)
+
+      return [
+        `# ================= ${entity.name.toUpperCase()} =================`,
+        ``,
+        `### 📘 GET - Listar todos`,
+        `GET ${url}`,
+        ``,
+        `### 🟢 POST - Crear nuevo`,
+        `POST ${url}`,
+        `Content-Type: application/json`,
+        ``,
+        `${json}`,
+        ``,
+        `### 🔍 GET - Buscar por ID`,
+        `GET ${url}/{id}`,
+        ``,
+        `### 🟡 PUT - Actualizar por ID`,
+        `PUT ${url}/{id}`,
+        `Content-Type: application/json`,
+        ``,
+        `${json}`,
+        ``,
+        `### 🔴 DELETE - Eliminar por ID`,
+        `DELETE ${url}/{id}`,
+        ``
+      ].join("\n")
+    })
+    .join("\n\n")
 }
+
 
 
 
@@ -813,7 +832,7 @@ class ${appClass}Tests {
   zip.file('mvnw.cmd', mvnwCmd.trimStart())
 
   // === Generar colección Postman ===
-zip.file(`postman/${projectName}-collection.json`, generatePostmanCollection(er, projectName))
+zip.file(`postman/${projectName}-collection.json`, generatePostmanText(er))
 
   // === Resultado final del ZIP ===
   return await zip.generateAsync({ type: 'blob' })

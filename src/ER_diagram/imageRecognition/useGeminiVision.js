@@ -193,8 +193,9 @@ Antes de devolver el JSON, verifica:
 4. Las relaciones usan nombres de entidades exactos (case-sensitive)
 5.  Las cardinalidades son una de: "1", "0..1", "1..*", "0..*"
 6.  El JSON es válido (sin comas finales, comillas correctas)
+7.  Todos los tipos de atributos (fecha, número, booleano, etc.) deben ser convertidos a "string".
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 **RECUERDA:** Devuelve SOLO el JSON, sin explicaciones adicionales.
 `;
